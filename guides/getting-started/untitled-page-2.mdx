@@ -1,0 +1,255 @@
+---
+title: 'Concepts'
+description: 'Core concepts and terminology used in Clancy SMS'
+---
+
+Understanding core concepts helps you use Clancy SMS effectively. This guide explains workspaces, API keys, messages, delivery events, and other fundamental concepts.
+
+## Workspaces
+
+A **workspace** is an isolated container for your SMS sending operations. Each workspace has its own:
+
+- API keys
+- Messages and delivery events
+- Rate limits and settings
+- Suppression list
+- Usage statistics
+
+Workspaces are multi-tenant isolated—data from one workspace cannot access data from another, even if they share the same database.
+
+<Info>
+Workspaces are the primary organizational unit in Clancy SMS. When you create an account, you get one workspace. Enterprise customers can have multiple workspaces for different projects or environments.
+</Info>
+
+## API Keys
+
+**API keys** are credentials used to authenticate API requests. Each workspace can have multiple API keys, allowing you to:
+
+- Separate keys for different applications or environments
+- Rotate keys without downtime
+- Revoke keys independently
+
+API keys are prefixed with `sk_live_` (production) or `sk_test_` (test). They're hashed at rest and shown only once at creation—save them securely.
+
+<Callout>
+**API Key Security**: API keys are sensitive credentials. Treat them like passwords: never commit them to version control, expose them in client-side code, or log them.
+</Callout>
+
+## Messages
+
+A **message** represents a single SMS send operation. Each message has:
+
+- **ID**: Unique identifier (`msg_abc123`)
+- **Status**: Current delivery state (`pending`, `queued`, `sent`, `delivered`, `failed`, `blocked`)
+- **Recipient**: Phone number in E.164 format (`+15551234567`)
+- **Body**: Message content
+- **Timestamps**: `created_at`, `sent_at`, `delivered_at`
+- **Delivery Events**: Timeline of status changes
+
+### Message Status Lifecycle
+
+Messages progress through these states:
+
+```
+pending → queued → sent → delivered
+                  ↓
+                failed / blocked
+```
+
+<Info>
+Messages are created in `pending` state when the API accepts your request. They transition to `queued` when picked up by a worker, then `sent` when sent to the provider, and finally `delivered` when confirmed by the provider.
+</Info>
+
+### Message States
+
+<Fields>
+
+<Field name="pending" type="string">
+Message was created and is waiting to be processed by a worker.
+</Field>
+
+<Field name="queued" type="string">
+Message is queued at the SMS provider and will be sent shortly.
+</Field>
+
+<Field name="sent" type="string">
+Message was successfully sent to the provider. Awaiting delivery confirmation.
+</Field>
+
+<Field name="delivered" type="string">
+Message was successfully delivered to the recipient's device.
+</Field>
+
+<Field name="failed" type="string">
+Message delivery failed (e.g., invalid number, carrier rejection, network error).
+</Field>
+
+<Field name="blocked" type="string">
+Message was blocked by policy (e.g., suppressed recipient, content violation).
+</Field>
+
+</Fields>
+
+## Idempotency Keys
+
+An **idempotency key** (`requestId` in the SDK) ensures that sending the same request multiple times results in only one message being created.
+
+When you send a message with an idempotency key, Clancy SMS:
+
+1. Checks if a message with that key already exists
+2. If it exists, returns the existing message
+3. If it doesn't exist, creates a new message
+
+<Info>
+Idempotency keys are scoped to your workspace. Use unique identifiers like UUIDs, timestamps with request identifiers, or your own unique IDs to generate idempotency keys.
+</Info>
+
+**Example**:
+
+```typescript
+// First request creates a message
+const message1 = await sms.otp.send({
+  to: '+15551234567',
+  code: '123456',
+  requestId: 'login_attempt_abc123',
+});
+
+// Retry with the same idempotency key returns the original message
+const message2 = await sms.otp.send({
+  to: '+15551234567',
+  code: '123456',
+  requestId: 'login_attempt_abc123', // Same key
+});
+
+// message1.id === message2.id
+```
+
+## Delivery Events
+
+**Delivery events** track the status changes of a message over time. Each event records:
+
+- **Event Type**: Status change (`queued`, `sent`, `delivered`, `failed`)
+- **Occurred At**: Timestamp of the event
+- **Metadata**: Provider-specific information
+
+Delivery events are created automatically when:
+
+- A worker processes a message (queued, sent)
+- A webhook callback is received (delivered, failed)
+- A status update occurs
+
+<Info>
+Use delivery events to build delivery timelines, debug delivery issues, or track message journey through the system.
+</Info>
+
+## Suppression List
+
+The **suppression list** prevents sending messages to recipients who have opted out. Recipients are automatically added when they:
+
+- Send `STOP` to your number
+- Send `UNSUBSCRIBE` or `STOPALL`
+
+Suppression is workspace-scoped—each workspace maintains its own suppression list.
+
+<Info>
+Once a recipient is suppressed, all future sends to that number will be blocked with a `RECIPIENT_SUPPRESSED` error. Recipients can opt back in by sending `START` or `YES`.
+</Info>
+
+## Rate Limits
+
+**Rate limits** control how many messages you can send within a time period. Clancy SMS enforces:
+
+- **Per-minute limits**: Maximum messages per minute
+- **Per-hour limits**: Maximum messages per hour
+- **Per-day limits**: Maximum messages per day
+- **Ramp limits**: Reduced limits for new workspaces
+
+Rate limits are workspace-specific and protect sender reputation by preventing abuse.
+
+<Info>
+New workspaces start with ramp limits to prevent reputation issues. Limits increase automatically after a period of successful sending.
+</Info>
+
+## Webhooks
+
+**Webhooks** notify your application when message status changes. Configure webhook URLs in your workspace settings to receive:
+
+- Delivery status updates (`delivered`, `failed`)
+- Status transitions (`queued` → `sent` → `delivered`)
+
+Webhooks use HTTP POST requests with JSON payloads. Clancy SMS signs webhook payloads so you can verify authenticity.
+
+<Info>
+Webhooks are optional but recommended for production applications. Use them to update your application state when messages are delivered or fail, rather than polling for status updates.
+</Info>
+
+## Policy Enforcement
+
+**Policy enforcement** ensures all messages comply with:
+
+- **Transactional-only policy**: Blocks marketing language and promotional content
+- **Content restrictions**: Blocks URL shorteners and prohibited keywords
+- **Recipient limits**: Prevents burst sending to the same recipient
+- **Workspace status**: Respects workspace pause and global pause
+
+Messages that violate policy are blocked before sending with a clear error message.
+
+## Phone Number Format
+
+Phone numbers must be in **E.164 format**: `+[country code][number]`
+
+**Examples**:
+
+- US: `+15551234567`
+- UK: `+447911123456`
+- Invalid: `15551234567` (missing `+`)
+
+<Info>
+Clancy SMS normalizes phone numbers internally. Always send numbers in E.164 format to ensure consistent handling.
+</Info>
+
+## OTP Message Format
+
+When you use `sms.otp.send()`, Clancy SMS automatically formats the message:
+
+```
+Your verification code is: [code]
+```
+
+<Info>
+This format is standardized and optimized for deliverability. You cannot customize the OTP message format—use the generic send endpoint if you need custom message content.
+</Info>
+
+## Terminology Reference
+
+<AccordionGroup>
+  <Accordion title="Glossary">
+
+**Workspace**: Isolated container for SMS operations
+
+**API Key**: Credential for authenticating API requests
+
+**Message**: Single SMS send operation
+
+**Delivery Event**: Status change record for a message
+
+**Idempotency Key**: Unique identifier that prevents duplicate sends
+
+**Suppression List**: List of opted-out recipients
+
+**Rate Limit**: Maximum send rate within a time period
+
+**Webhook**: HTTP callback for status updates
+
+**Policy**: Rules that enforce transactional-only sending
+
+**E.164**: International phone number format (`+[country][number]`)
+
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+- [Quickstart](/docs/00-introduction/quickstart) — Send your first message
+- [Security Model](/docs/00-introduction/security-model) — Understand authentication
+- [Limits and Ramping](/docs/00-introduction/limits-and-ramping) — Learn about rate limits

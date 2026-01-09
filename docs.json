@@ -12,14 +12,13 @@
     "global": {
       "anchors": [
         {
-          "anchor": "Documentation",
-          "icon": "book-open-cover",
-          "href": "https://mintlify.com/docs"
-        },
-        {
-          "anchor": "Blog",
-          "icon": "newspaper",
-          "href": "https://mintlify.com/blog"
+          "anchor": "Dashboard",
+          "icon": "house",
+          "color": {
+            "light": "#82e8f6",
+            "dark": "#82e8f6"
+          },
+          "href": "https://clancy-sms.com/dashboard"
         }
       ]
     },
@@ -30,33 +29,19 @@
           {
             "group": "Getting started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "guides/untitled-page-1",
+              "guides/getting-started/untitled-page-6",
+              "guides/getting-started/untitled-page",
+              "guides/getting-started/untitled-page-1",
+              "guides/getting-started/untitled-page-2"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Policies",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "guides/getting-started/untitled-page-4",
+              "guides/getting-started/untitled-page-3",
+              "guides/getting-started/untitled-page-5"
             ]
           }
         ]

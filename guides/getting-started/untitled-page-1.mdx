@@ -1,0 +1,310 @@
+---
+title: 'Environment Variables'
+description: 'Configure environment variables for Clancy SMS'
+---
+
+Environment variables are used to configure the Clancy SMS SDK and manage API keys securely.
+
+## Required Variables
+
+### CLANCY_SMS_API_KEY
+
+Your Clancy SMS API key for authenticating requests.
+
+<Callout>
+**Security**: Never commit API keys to version control. Always store them in environment variables or a secrets management service.
+</Callout>
+
+**Where to find it**: Your workspace dashboard → API Keys section
+
+**Format**: `sk_live_abc123...` or `sk_test_xyz789...`
+
+**Example**:
+
+```bash
+CLANCY_SMS_API_KEY=sk_live_abc123def456ghi789
+```
+
+## Optional Variables
+
+### CLANCY_API_URL
+
+Custom API base URL. Use this for testing with a custom instance or local development.
+
+**Default**: `https://api.clancy.com`
+
+**Example**:
+
+```bash
+CLANCY_API_URL=https://api.staging.clancy.com
+```
+
+<Info>
+In browser environments, the SDK defaults to `window.location.origin` if `CLANCY_API_URL` is not set. In Node.js, it defaults to `https://api.clancy.com`.
+</Info>
+
+## Setting Environment Variables
+
+### Development (Local)
+
+Create a `.env` file in your project root:
+
+```bash
+CLANCY_SMS_API_KEY=sk_live_abc123def456ghi789
+CLANCY_API_URL=https://api.clancy.com
+```
+
+<Info>
+Add `.env` to your `.gitignore` file to prevent committing secrets to version control.
+</Info>
+
+### Next.js
+
+Next.js automatically loads environment variables from `.env.local`. Create `.env.local` in your project root:
+
+```bash
+CLANCY_SMS_API_KEY=sk_live_abc123def456ghi789
+```
+
+<Info>
+For Next.js, prefix variables with `NEXT_PUBLIC_` only if you need them in browser code. Since API keys should never be exposed to the browser, do not prefix `CLANCY_SMS_API_KEY` with `NEXT_PUBLIC_`.
+</Info>
+
+### Vercel
+
+In Vercel, add environment variables in your project settings:
+
+1. Go to your project → Settings → Environment Variables
+2. Add `CLANCY_SMS_API_KEY` with your API key value
+3. Select the environments (Production, Preview, Development)
+4. Save and redeploy
+
+### Other Platforms
+
+<AccordionGroup>
+  <Accordion title="Railway">
+
+In Railway, add environment variables:
+
+1. Go to your service → Variables
+2. Add `CLANCY_SMS_API_KEY` with your API key value
+3. Save (deploys automatically)
+
+  </Accordion>
+  <Accordion title="Heroku">
+
+In Heroku, use the CLI or dashboard:
+
+```bash
+heroku config:set CLANCY_SMS_API_KEY=sk_live_abc123...
+```
+
+Or use the Heroku Dashboard → Settings → Config Vars
+
+  </Accordion>
+  <Accordion title="AWS (Lambda / EC2)">
+
+**Lambda**: Add environment variables in the Lambda function configuration
+
+**EC2 / ECS**: Use AWS Systems Manager Parameter Store or Secrets Manager:
+
+```bash
+aws ssm put-parameter \
+  --name "/clancy/sms/api-key" \
+  --value "sk_live_abc123..." \
+  --type "SecureString"
+```
+
+  </Accordion>
+  <Accordion title="Docker">
+
+Use `docker-compose.yml`:
+
+```yaml
+services:
+  app:
+    environment:
+      - CLANCY_SMS_API_KEY=${CLANCY_SMS_API_KEY}
+```
+
+Or use a `.env` file that Docker Compose reads automatically.
+
+  </Accordion>
+</AccordionGroup>
+
+## Loading Environment Variables
+
+### Node.js
+
+Use `dotenv` to load environment variables from a `.env` file:
+
+```bash
+npm install dotenv
+```
+
+```typescript
+import 'dotenv/config';
+import { SMS } from '@clancydev/sms';
+
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+```
+
+### Next.js
+
+Next.js automatically loads `.env.local`, `.env.development`, and `.env.production`. No additional setup required:
+
+```typescript
+import { SMS } from '@clancydev/sms';
+
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+```
+
+### TypeScript
+
+TypeScript doesn't know about `process.env` variables by default. Create a type declaration file:
+
+```typescript
+// env.d.ts
+declare namespace NodeJS {
+  interface ProcessEnv {
+    CLANCY_SMS_API_KEY: string;
+    CLANCY_API_URL?: string;
+  }
+}
+```
+
+## Environment-Specific Configuration
+
+### Development
+
+Use test API keys for local development:
+
+```bash
+# .env.local (development)
+CLANCY_SMS_API_KEY=sk_test_xyz789...
+```
+
+### Staging
+
+Use staging API keys or point to a staging API URL:
+
+```bash
+# .env.staging
+CLANCY_SMS_API_KEY=sk_live_abc123...
+CLANCY_API_URL=https://api.staging.clancy.com
+```
+
+### Production
+
+Use production API keys:
+
+```bash
+# .env.production
+CLANCY_SMS_API_KEY=sk_live_abc123...
+```
+
+## Validation
+
+Validate that required environment variables are set at application startup:
+
+```typescript
+function validateEnv() {
+  if (!process.env.CLANCY_SMS_API_KEY) {
+    throw new Error(
+      'Missing required environment variable: CLANCY_SMS_API_KEY\n' +
+      'Add it to your .env file or environment configuration.'
+    );
+  }
+}
+
+validateEnv();
+
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+```
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Never expose API keys in client-side code">
+
+**❌ Bad**: Exposing API key in browser code
+
+```typescript
+// ❌ NEVER DO THIS
+const sms = new SMS('sk_live_abc123...'); // Hardcoded key
+```
+
+**✅ Good**: Use server-side API route
+
+```typescript
+// ✅ Server-side API route
+// app/api/send-otp/route.ts
+import { SMS } from '@clancydev/sms';
+
+export async function POST(request: Request) {
+  const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+  // ... handle request
+}
+```
+
+  </Accordion>
+  <Accordion title="Use secrets management services in production">
+
+For production, use a secrets management service:
+
+**AWS**: Secrets Manager or Parameter Store
+
+**GCP**: Secret Manager
+
+**Azure**: Key Vault
+
+**Vercel**: Environment Variables (automatically secure)
+
+  </Accordion>
+  <Accordion title="Rotate API keys regularly">
+
+Rotate API keys periodically:
+
+1. Generate a new API key in your workspace dashboard
+2. Update your environment variables
+3. Deploy with the new key
+4. Delete the old API key after verifying the new one works
+
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Environment variable not found">
+
+**Problem**: `process.env.CLANCY_SMS_API_KEY` is `undefined`
+
+**Solutions**:
+
+1. Verify the variable name matches exactly (case-sensitive)
+2. Restart your development server after adding/updating `.env` files
+3. Ensure the `.env` file is in the project root
+4. Check that your platform loads environment variables correctly
+
+  </Accordion>
+  <Accordion title="Different values in different environments">
+
+**Problem**: Environment variables have different values in different environments
+
+**Solution**: Use environment-specific files:
+
+- `.env.local` for local development
+- `.env.staging` for staging
+- `.env.production` for production
+
+Or use your platform's environment variable configuration UI.
+
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+- [Quickstart](/docs/00-introduction/quickstart) — Send your first OTP
+- [Security Model](/docs/00-introduction/security-model) — Learn about API key security
+- [Installation](/docs/00-introduction/installation) — Complete installation guide

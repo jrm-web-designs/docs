@@ -1,0 +1,267 @@
+---
+title: "Quickstart"
+description: "Send your first OTP in under 5 minutes"
+---
+
+Get started with Clancy SMS by sending your first OTP code. This guide walks you through installation, configuration, and your first successful send.
+
+<Info>
+  **Prerequisites**: You'll need a Clancy SMS workspace and API key. If you don't have one yet, sign up at the dashboard to create a workspace and generate an API key.
+</Info>
+
+## What you'll learn
+
+In this quickstart, you'll:
+
+- Install the Clancy SMS client SDK
+- Configure your API key
+- Send an OTP code to a phone number
+- Check message delivery status
+
+## Installation
+
+Install the SDK using your package manager:
+
+<Tabs>
+  <Tab title="npm">
+    ```bash
+    npm install @clancydev/sms
+    ```
+  </Tab>
+  <Tab title="yarn">
+    ```bash
+    yarn add @clancydev/sms
+    ```
+  </Tab>
+  <Tab title="pnpm">
+    ```bash
+    pnpm add @clancydev/sms
+    ```
+  </Tab>
+  <Tab title="bun">
+    ```bash
+    bun add @clancydev/sms
+    ```
+  </Tab>
+</Tabs>
+
+## Configuration
+
+Create an instance of the SMS client with your API key. Store your API key in an environment variable—never hardcode it in your application.
+
+```typescript
+import { SMS } from '@clancydev/sms';
+
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+```
+
+<Info>
+  **API Key Storage**: Use environment variables or a secrets management service. Never commit API keys to version control or expose them in client-side code.
+</Info>
+
+If you're using a custom API base URL (for testing or self-hosted instances), you can configure it:
+
+```typescript
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!, {
+  baseUrl: 'https://api.your-instance.com'
+});
+```
+
+## Send Your First OTP
+
+Use the `sms.otp.send()` method to send an OTP code. This method requires:
+
+- `to`: Recipient phone number in E.164 format (e.g., `+15551234567`)
+- `code`: The OTP code to send (e.g., `"123456"`)
+- `requestId`: A unique identifier for this send request (used for idempotency)
+
+```typescript
+import { SMS } from '@clancydev/sms';
+
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+
+async function sendOTP() {
+  try {
+    const message = await sms.otp.send({
+      to: '+15551234567',
+      code: '123456',
+      requestId: `login_${Date.now()}`,
+    });
+
+    console.log('Message sent:', message.id);
+    console.log('Status:', message.status);
+  } catch (error) {
+    console.error('Failed to send OTP:', error);
+  }
+}
+
+sendOTP();
+```
+
+<Info>
+  The `requestId` must be unique for each distinct send operation. If you retry the same request with the same `requestId`, Clancy SMS will return the original message instead of creating a duplicate. Use timestamps, UUIDs, or your own unique identifiers to generate request IDs.
+</Info>
+
+## Understanding the Response
+
+The `sms.otp.send()` method returns a `Message` object:
+
+```typescript
+{
+  id: "msg_abc123",
+  status: "pending",
+  to: "+15551234567",
+  from: null,
+  body: "Your verification code is: 123456",
+  created_at: "2024-01-15T10:30:00Z"
+}
+```
+
+The `status` field indicates the current state of the message:
+
+- `pending`: Message was created and is queued for sending
+- `queued`: Message is queued at the provider
+- `sent`: Message was sent to the provider
+- `delivered`: Message was delivered to the recipient
+- `failed`: Message delivery failed
+- `blocked`: Message was blocked (e.g., suppressed recipient)
+
+<Info>
+  Messages are sent asynchronously. After a successful API response, the message will be in `pending` or `queued` state. Use webhooks or polling to track final delivery status.
+</Info>
+
+## Check Message Status
+
+Retrieve a message's current status and delivery events using the message ID:
+
+```typescript
+async function checkStatus(messageId: string) {
+  const message = await sms.messages.get(messageId);
+  
+  console.log('Status:', message.status);
+  console.log('Delivered at:', message.delivered_at);
+  
+  if (message.events) {
+    console.log('Delivery events:');
+    message.events.forEach(event => {
+      console.log(`- ${event.event_type} at ${event.occurred_at}`);
+    });
+  }
+}
+```
+
+## Error Handling
+
+Clancy SMS throws specific error types that you should handle:
+
+```typescript
+import {
+  SMS,
+  AuthenticationError,
+  ValidationError,
+  PolicyBlockedError,
+  NotFoundError,
+} from '@clancydev/sms';
+
+try {
+  const message = await sms.otp.send({
+    to: '+15551234567',
+    code: '123456',
+    requestId: `login_${Date.now()}`,
+  });
+} catch (error) {
+  if (error instanceof AuthenticationError) {
+    console.error('Invalid API key');
+  } else if (error instanceof ValidationError) {
+    console.error('Invalid request:', error.message);
+  } else if (error instanceof PolicyBlockedError) {
+    console.error('Sending blocked:', error.message);
+    console.error('Violation type:', error.metadata?.violation_type);
+  } else if (error instanceof NotFoundError) {
+    console.error('Resource not found');
+  } else {
+    console.error('Unexpected error:', error);
+  }
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Common validation errors">
+    **Invalid phone number format**: Phone numbers must be in E.164 format (start with `+`)
+
+    ```typescript
+    // ❌ Invalid
+    to: '15551234567'
+    
+    // ✅ Valid
+    to: '+15551234567'
+    ```
+
+    **Missing required fields**: Ensure `to`, `code`, and `requestId` are all provided
+
+    **Request ID too long**: `requestId` must be 255 characters or less
+  </Accordion>
+  <Accordion title="Policy block errors">
+    **Rate limit exceeded**: You've sent too many messages. Wait before retrying.
+
+    **Recipient suppressed**: The recipient has opted out (STOP). Remove them from your suppression list to send again.
+
+    **Workspace paused**: Your workspace sending has been paused. Contact support.
+
+    **Content blocked**: Message content violates policy (e.g., contains marketing language or URL shorteners).
+  </Accordion>
+</AccordionGroup>
+
+## Complete Example
+
+Here's a complete example that combines everything:
+
+```typescript
+import { SMS, ValidationError, PolicyBlockedError } from '@clancydev/sms';
+
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+
+async function sendOTPWithRetry(phoneNumber: string, code: string) {
+  const requestId = `otp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  try {
+    const message = await sms.otp.send({
+      to: phoneNumber,
+      code: code,
+      requestId: requestId,
+    });
+
+    console.log(`OTP sent: ${message.id}`);
+    
+    // Optionally check status after a delay
+    setTimeout(async () => {
+      const updated = await sms.messages.get(message.id);
+      console.log(`Final status: ${updated.status}`);
+    }, 5000);
+
+    return message;
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      console.error('Validation error:', error.message);
+    } else if (error instanceof PolicyBlockedError) {
+      console.error('Blocked:', error.message);
+      if (error.code === 'RATE_LIMIT_EXCEEDED') {
+        console.error('Rate limit exceeded. Please wait before retrying.');
+      }
+    } else {
+      console.error('Unexpected error:', error);
+    }
+    throw error;
+  }
+}
+
+// Usage
+sendOTPWithRetry('+15551234567', '123456');
+```
+
+## Next Steps
+
+- [Installation](/docs/00-introduction/installation) — Detailed installation instructions
+- [Concepts](/docs/00-introduction/concepts) — Understand workspaces, API keys, and messages
+- [OTP Delivery Guide](/docs/01-guides/otp-delivery) — Best practices for OTP implementation
+- [API Reference: Send Message](/docs/03-api-reference/send-message) — Complete API documentation

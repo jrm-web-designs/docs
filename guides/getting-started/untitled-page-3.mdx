@@ -1,0 +1,284 @@
+---
+title: 'Compliance and Suppression'
+description: 'How Clancy SMS handles STOP/START/HELP requests and maintains compliance'
+---
+
+Clancy SMS automatically handles STOP/START/HELP requests to ensure TCPA compliance and prevent sending to opted-out recipients.
+
+## STOP/START/HELP Handling
+
+Clancy SMS automatically processes inbound SMS messages containing compliance keywords:
+
+- **STOP**: Opts out the recipient (adds to suppression list)
+- **START** / **YES** / **UNSTOP**: Opts in the recipient (removes from suppression list)
+- **HELP** / **INFO**: Logs the request (no suppression action)
+
+<Info>
+STOP/START/HELP handling is automatic and requires no additional configuration. When a recipient sends these keywords to your number, Clancy SMS processes them automatically.
+</Info>
+
+## Suppression List
+
+The **suppression list** is a workspace-scoped list of phone numbers that have opted out. Once a recipient is on the suppression list:
+
+- All future sends to that number are blocked
+- The API returns a `RECIPIENT_SUPPRESSED` error
+- The recipient must opt back in with START/YES/UNSTOP
+
+<Callout>
+**TCPA Compliance**: Sending to suppressed recipients violates TCPA regulations. Clancy SMS automatically blocks sends to suppressed numbers to keep you compliant.
+</Callout>
+
+## How Suppression Works
+
+### Automatic Suppression
+
+When a recipient sends `STOP` (or `STOPALL`, `UNSUBSCRIBE`):
+
+1. Clancy SMS receives the inbound SMS
+2. Identifies the workspace based on the sender number
+3. Normalizes the recipient's phone number
+4. Adds the number to the suppression list
+5. Blocks all future sends to that number
+
+### Opting Back In
+
+When a recipient sends `START` (or `YES`, `UNSTOP`):
+
+1. Clancy SMS receives the inbound SMS
+2. Identifies the workspace
+3. Removes the number from the suppression list
+4. Allows future sends to that number
+
+<Info>
+Opt-in is immediate. Once a recipient sends START, they can receive messages again right away.
+</Info>
+
+## Testing Suppression
+
+To test suppression handling:
+
+1. Send a message to a test phone number
+2. Reply with `STOP` from that number
+3. Attempt to send another message
+4. Verify the send is blocked with `RECIPIENT_SUPPRESSED` error
+
+<Info>
+Suppression is workspace-scoped. If you have multiple workspaces, each maintains its own suppression list.
+</Info>
+
+## Handling Suppression Errors
+
+When you attempt to send to a suppressed recipient, the API returns:
+
+```json
+{
+  "error": "Sending not allowed",
+  "reason": "Recipient has opted out (STOP)",
+  "violation_type": "content_block",
+  "hint": "This recipient has opted out. Remove them from your suppression list to send again."
+}
+```
+
+Handle this error in your application:
+
+```typescript
+import { PolicyBlockedError } from '@clancydev/sms';
+
+try {
+  await sms.otp.send({
+    to: '+15551234567',
+    code: '123456',
+    requestId: 'test_123',
+  });
+} catch (error) {
+  if (error instanceof PolicyBlockedError && error.code === 'RECIPIENT_SUPPRESSED') {
+    // Recipient has opted out
+    // Don't retry - respect the opt-out
+    console.error('Recipient has opted out');
+  }
+}
+```
+
+<Callout>
+**Do Not Retry**: If you receive a `RECIPIENT_SUPPRESSED` error, do not retry the send. The recipient has explicitly opted out and must opt back in first.
+</Callout>
+
+## Compliance Keywords
+
+Clancy SMS recognizes these keywords (case-insensitive):
+
+<AccordionGroup>
+  <Accordion title="STOP keywords">
+
+`STOP`
+
+`STOPALL`
+
+`UNSUBSCRIBE`
+
+`CANCEL`
+
+`END`
+
+`QUIT`
+
+All of these keywords add the recipient to the suppression list.
+
+  </Accordion>
+  <Accordion title="START keywords">
+
+`START`
+
+`YES`
+
+`UNSTOP`
+
+`SUBSCRIBE`
+
+`RESUME`
+
+All of these keywords remove the recipient from the suppression list.
+
+  </Accordion>
+  <Accordion title="HELP keywords">
+
+`HELP`
+
+`INFO`
+
+`SUPPORT`
+
+These keywords log the request but don't change suppression status.
+
+  </Accordion>
+</AccordionGroup>
+
+## Manual Suppression Management
+
+While STOP requests are handled automatically, you can manually manage the suppression list through the dashboard:
+
+1. Navigate to Suppression List in your workspace
+2. View all suppressed numbers
+3. Manually remove numbers if needed
+4. Export the suppression list for backup
+
+<Info>
+Manual suppression management is useful for bulk imports or corrections. However, automatic STOP/START handling is recommended for compliance.
+</Info>
+
+## TCPA Compliance
+
+### What is TCPA?
+
+The **Telephone Consumer Protection Act (TCPA)** requires:
+
+- Obtaining prior express consent before sending SMS
+- Providing opt-out mechanisms (STOP keyword)
+- Honoring opt-out requests immediately
+- Maintaining suppression lists
+
+### How Clancy SMS Helps
+
+Clancy SMS automatically:
+
+- Processes STOP requests immediately
+- Maintains suppression lists per workspace
+- Blocks sends to suppressed recipients
+- Logs compliance actions for audit
+
+<Info>
+While Clancy SMS handles STOP/START automatically, you're still responsible for obtaining proper consent before sending messages and including opt-out instructions in your messages.
+</Info>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Include opt-out instructions">
+
+Always include opt-out instructions in your messages:
+
+```
+Your verification code is: 123456
+
+Reply STOP to opt out.
+```
+
+  </Accordion>
+  <Accordion title="Handle suppression errors gracefully">
+
+Don't retry sends to suppressed recipients. Instead:
+
+Log the suppression
+
+Remove the number from your marketing lists
+
+Respect the opt-out
+
+  </Accordion>
+  <Accordion title="Monitor suppression rates">
+
+Monitor suppression rates to identify issues:
+
+High suppression rates may indicate poor messaging
+
+Sudden spikes may indicate abuse or complaints
+
+Use suppression data to improve messaging strategy
+
+  </Accordion>
+  <Accordion title="Obtain proper consent">
+
+Before sending messages:
+
+Obtain explicit consent
+
+Document consent (when, how, what was agreed)
+
+Make consent easily revocable (STOP keyword)
+
+  </Accordion>
+</AccordionGroup>
+
+## Suppression List Scope
+
+### Workspace Isolation
+
+Suppression lists are **workspace-scoped**:
+
+- Each workspace maintains its own suppression list
+- Suppression in one workspace doesn't affect another
+- API keys can only access suppression data from their workspace
+
+<Info>
+If you have multiple workspaces (e.g., production and staging), each has its own suppression list. A number suppressed in staging doesn't affect production.
+</Info>
+
+### Phone Number Normalization
+
+Phone numbers are normalized for suppression matching:
+
+- Both `+15551234567` and `15551234567` map to the same suppression entry
+- Leading `+1` prefixes are removed for matching
+- Suppression matching is case-insensitive
+
+## Suppression List Access
+
+### Via API
+
+Access suppression data through the dashboard API (if available) or database queries (if you have direct database access).
+
+### Via Dashboard
+
+View and manage the suppression list in your workspace dashboard:
+
+1. Navigate to Compliance → Suppression List
+2. View all suppressed numbers
+3. Search and filter
+4. Export the list
+
+## Next Steps
+
+- [Concepts](/docs/00-introduction/concepts) — Understand core concepts
+- [Limits and Ramping](/docs/00-introduction/limits-and-ramping) — Learn about rate limits
+- [Troubleshooting](/docs/00-introduction/troubleshooting) — Common issues and solutions

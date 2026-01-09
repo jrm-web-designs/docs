@@ -1,0 +1,291 @@
+---
+title: 'Limits and Ramping'
+description: 'Rate limits, ramping, and anti-abuse controls in Clancy SMS'
+---
+
+Clancy SMS enforces rate limits to protect sender reputation and prevent abuse. New workspaces start with ramp limits that increase automatically over time.
+
+## Rate Limits
+
+Rate limits control how many messages you can send within a time period. Clancy SMS enforces limits at multiple levels:
+
+- **Per-minute**: Maximum messages per minute
+- **Per-hour**: Maximum messages per hour
+- **Per-day**: Maximum messages per day (if configured)
+
+<Info>
+Rate limits are workspace-specific and protect sender reputation by preventing abuse and ensuring consistent sending patterns.
+</Info>
+
+### Default Limits
+
+Default rate limits vary by workspace plan and age. New workspaces start with conservative limits that increase as you build sending history.
+
+### Limit Types
+
+<Fields>
+
+<Field name="rate_limit_per_minute" type="number">
+Maximum messages you can send per minute. Exceeding this limit returns a `RATE_LIMIT_EXCEEDED` error.
+</Field>
+
+<Field name="rate_limit_per_hour" type="number">
+Maximum messages you can send per hour. Applies after ramp-up period.
+</Field>
+
+<Field name="daily_limit" type="number" optional>
+Maximum messages you can send per day. May be configured for your workspace.
+</Field>
+
+<Field name="ramp_limit_per_hour" type="number">
+Initial hourly limit for new workspaces. Applied during ramp-up period.
+</Field>
+
+</Fields>
+
+## Ramp-Up Period
+
+New workspaces start with **ramp limits** to prevent reputation issues:
+
+- **Day 0-1**: Use `ramp_limit_per_hour` (typically 10-50 messages/hour)
+- **Week 1**: Use 50% of normal hourly limit
+- **After Week 1**: Use full `rate_limit_per_hour`
+
+<Info>
+Ramp limits automatically increase based on workspace age and sending history. No action is required—limits increase automatically.
+</Info>
+
+### Ramp-Up Timeline
+
+```
+Day 0-1:   Ramp limit (e.g., 50/hour)
+Week 1:    50% of normal limit (e.g., 500/hour)
+Week 2+:   Full normal limit (e.g., 1000/hour)
+```
+
+<Info>
+Ramp-up is automatic and based on workspace creation date. Consistent, successful sending helps establish good reputation faster.
+</Info>
+
+## Rate Limit Errors
+
+When you exceed a rate limit, the API returns:
+
+```json
+{
+  "error": "Sending not allowed",
+  "reason": "Rate limit exceeded: 51/50 messages per minute",
+  "violation_type": "rate_limit",
+  "hint": "Please wait before sending more messages. Check your rate limits in the dashboard."
+}
+```
+
+### Handling Rate Limit Errors
+
+Handle rate limit errors with exponential backoff:
+
+```typescript
+import { PolicyBlockedError } from '@clancydev/sms';
+
+async function sendWithRetry(request: OTPRequest, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await sms.otp.send(request);
+    } catch (error) {
+      if (error instanceof PolicyBlockedError && error.code === 'RATE_LIMIT_EXCEEDED') {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = Math.pow(2, attempt) * 1000;
+        console.log(`Rate limited. Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+```
+
+<Callout>
+**Retry Logic**: When rate limited, wait before retrying. Exponential backoff prevents overwhelming the API and helps requests succeed once limits reset.
+</Callout>
+
+## Recipient Burst Limits
+
+**Recipient burst limits** prevent sending too many messages to the same recipient in a short time:
+
+- **Limit**: Maximum 10 messages per recipient per 5 minutes
+- **Purpose**: Prevents accidental loops and abuse
+- **Scope**: Per-workspace, per-recipient
+
+<Info>
+Recipient burst limits are separate from rate limits. You can hit the recipient burst limit even if you're under your overall rate limits.
+</Info>
+
+### Burst Limit Errors
+
+Exceeding the recipient burst limit returns:
+
+```json
+{
+  "error": "Sending not allowed",
+  "reason": "Recipient burst limit exceeded: 11/10 messages to +15551234567 in 5 minutes",
+  "violation_type": "recipient_burst",
+  "hint": "Too many messages sent to this recipient recently. Wait a few minutes before trying again."
+}
+```
+
+## Content Restrictions
+
+Content policy restrictions block:
+
+- **Marketing language**: Keywords like "limited time", "act now", "click here"
+- **URL shorteners**: Domains like bit.ly, tinyurl.com, t.co
+- **Promotional content**: Any content that violates transactional-only policy
+
+<Info>
+Content restrictions are automatically enforced. Messages that violate policy are blocked before sending with a clear error message.
+</Info>
+
+### Content Block Errors
+
+Content violations return:
+
+```json
+{
+  "error": "Sending not allowed",
+  "reason": "Marketing language detected: \"limited time\"",
+  "violation_type": "content_block",
+  "hint": "Message content violates policy. Ensure messages are transactional/OTP-only."
+}
+```
+
+## Workspace Status
+
+Workspace status affects sending:
+
+- **Active**: Normal sending allowed (subject to rate limits)
+- **Paused**: Sending temporarily disabled
+- **Suspended**: Sending disabled due to policy violations
+
+### Checking Workspace Status
+
+Check workspace status via API:
+
+```typescript
+const status = await sms.status.get();
+
+console.log('Sending allowed:', status.sending_allowed);
+console.log('Reason:', status.reason);
+console.log('Status:', status.status);
+```
+
+### Workspace Pause
+
+If your workspace is paused:
+
+1. Check the `reason` field for details
+2. Review policy violations in the dashboard
+3. Contact support if you believe it's an error
+
+<Info>
+Workspace pause is usually temporary. Review the reason and take corrective action to restore normal sending.
+</Info>
+
+## Global Pause
+
+**Global pause** is a platform-wide kill switch that disables all sending:
+
+- Used for emergency situations or platform maintenance
+- Affects all workspaces simultaneously
+- Check status endpoint to detect global pause
+
+<Info>
+Global pause is rare and usually brief. If detected, wait for it to be lifted or contact support for more information.
+</Info>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Implement application-level rate limiting">
+
+Even though Clancy SMS enforces rate limits, implement application-level limits to:
+
+Prevent accidental bursts
+
+Provide better user experience
+
+Reduce costs
+
+  </Accordion>
+  <Accordion title="Respect ramp limits">
+
+During ramp-up:
+
+Start with low-volume sending
+
+Gradually increase volume
+
+Monitor for errors
+
+Don't attempt to bypass limits
+
+  </Accordion>
+  <Accordion title="Handle rate limit errors gracefully">
+
+When rate limited:
+
+Implement exponential backoff
+
+Log the error for monitoring
+
+Notify users of delays if needed
+
+Don't retry immediately
+
+  </Accordion>
+  <Accordion title="Monitor your sending patterns">
+
+Track your sending:
+
+Monitor rate limit errors
+
+Identify peak sending times
+
+Plan for increased volume
+
+Request limit increases if needed
+
+  </Accordion>
+</AccordionGroup>
+
+## Requesting Limit Increases
+
+To request higher limits:
+
+1. Review your current usage in the dashboard
+2. Demonstrate consistent, compliant sending
+3. Explain your use case and expected volume
+4. Contact support with your request
+
+<Info>
+Limit increases are granted based on sending history, compliance record, and use case. New workspaces should build sending history before requesting increases.
+</Info>
+
+## Limit Monitoring
+
+Monitor your limits via:
+
+- **Dashboard**: View current limits and usage
+- **Status API**: Check `sending_allowed` and `reason` fields
+- **Error logs**: Track rate limit errors in your application
+
+<Info>
+Proactive monitoring helps you avoid rate limit errors and plan for capacity increases.
+</Info>
+
+## Next Steps
+
+- [Concepts](/docs/00-introduction/concepts) — Understand core concepts
+- [Troubleshooting](/docs/00-introduction/troubleshooting) — Common issues and solutions
+- [API Reference: Workspace Status](/docs/03-api-reference/workspace-status) — Status API documentation

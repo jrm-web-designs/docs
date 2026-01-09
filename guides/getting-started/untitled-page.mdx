@@ -1,0 +1,280 @@
+---
+title: "Installation"
+description: "Install and configure the Clancy SMS client SDK"
+---
+
+Install the Clancy SMS client SDK to start sending OTP codes and transactional messages from your application.
+
+## Requirements
+
+Before installing, ensure your environment meets these requirements:
+
+- **Node.js**: Version 18.0 or higher
+- **Package Manager**: npm, yarn, pnpm, or bun
+- **API Key**: A Clancy SMS API key from your workspace dashboard
+
+<Info>
+  The SDK works in both Node.js and browser environments. For browser usage, ensure your API key is never exposed in client-side code. Use a server-side proxy or backend API endpoint to handle SMS sending.
+</Info>
+
+## Install the SDK
+
+Install `@clancydev/sms` using your preferred package manager:
+
+<Tabs>
+  <Tab title="npm">
+    ```bash
+    npm install @clancydev/sms
+    ```
+  </Tab>
+  <Tab title="yarn">
+    ```bash
+    yarn add @clancydev/sms
+    ```
+  </Tab>
+  <Tab title="pnpm">
+    ```bash
+    pnpm add @clancydev/sms
+    ```
+  </Tab>
+  <Tab title="bun">
+    ```bash
+    bun add @clancydev/sms
+    ```
+  </Tab>
+</Tabs>
+
+## Import and Initialize
+
+Import the `SMS` class and create an instance with your API key:
+
+```typescript
+import { SMS } from '@clancydev/sms';
+
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+```
+
+<Info>
+  **API Key Security**: Never hardcode your API key. Always use environment variables or a secrets management service.
+</Info>
+
+## Configuration Options
+
+The `SMS` constructor accepts an optional configuration object:
+
+```typescript
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!, {
+  baseUrl: 'https://api.clancy.com' // Optional: custom API base URL
+});
+```
+
+### Configuration Options
+
+<Fields>
+  <Field name="apiKey" type="string" required>
+    Your Clancy SMS API key. Get this from your workspace dashboard.
+  </Field>
+
+  <Field name="options.baseUrl" type="string" optional>
+    Custom API base URL. Defaults to `https://api.clancy.com` in production or the current origin in browser environments. Use this for testing with a custom instance or local development.
+  </Field>
+</Fields>
+
+## Verify Installation
+
+Test your installation by sending a test OTP:
+
+```typescript
+import { SMS } from '@clancydev/sms';
+
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+
+async function testInstallation() {
+  try {
+    const message = await sms.otp.send({
+      to: '+15551234567',
+      code: '123456',
+      requestId: `test_${Date.now()}`,
+    });
+    console.log('✅ Installation successful! Message ID:', message.id);
+  } catch (error) {
+    console.error('❌ Installation test failed:', error);
+  }
+}
+
+testInstallation();
+```
+
+## TypeScript Support
+
+The SDK is written in TypeScript and includes type definitions. No additional `@types` package is required.
+
+If you're using TypeScript, you'll get full type checking and autocomplete:
+
+```typescript
+import { SMS, OTPRequest, Message } from '@clancydev/sms';
+
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+
+const request: OTPRequest = {
+  to: '+15551234567',
+  code: '123456',
+  requestId: 'test_123',
+};
+
+const message: Message = await sms.otp.send(request);
+```
+
+## Environment Variables
+
+Store your API key in an environment variable. Create a `.env` file (or `.env.local` for Next.js):
+
+```bash
+CLANCY_SMS_API_KEY=sk_live_abc123...
+```
+
+<Info>
+  Never commit `.env` files to version control. Add `.env` to your `.gitignore` file.
+</Info>
+
+## Framework-Specific Setup
+
+### Next.js (App Router)
+
+For Next.js App Router, create the client in a server component or API route:
+
+```typescript
+// app/api/send-otp/route.ts
+import { SMS } from '@clancydev/sms';
+import { NextResponse } from 'next/server';
+
+export async function POST(request: Request) {
+  const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+  
+  const { phoneNumber, code } = await request.json();
+  
+  const message = await sms.otp.send({
+    to: phoneNumber,
+    code: code,
+    requestId: `otp_${Date.now()}`,
+  });
+  
+  return NextResponse.json({ messageId: message.id });
+}
+```
+
+### Next.js (Pages Router)
+
+For Next.js Pages Router, use API routes:
+
+```typescript
+// pages/api/send-otp.ts
+import { SMS } from '@clancydev/sms';
+import type { NextApiRequest, NextApiResponse } from 'next';
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+  
+  const { phoneNumber, code } = req.body;
+  
+  const message = await sms.otp.send({
+    to: phoneNumber,
+    code: code,
+    requestId: `otp_${Date.now()}`,
+  });
+  
+  res.json({ messageId: message.id });
+}
+```
+
+### Express.js
+
+For Express.js, create a route handler:
+
+```typescript
+import express from 'express';
+import { SMS } from '@clancydev/sms';
+
+const app = express();
+app.use(express.json());
+
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+
+app.post('/api/send-otp', async (req, res) => {
+  const { phoneNumber, code } = req.body;
+  
+  try {
+    const message = await sms.otp.send({
+      to: phoneNumber,
+      code: code,
+      requestId: `otp_${Date.now()}`,
+    });
+    
+    res.json({ messageId: message.id });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to send OTP' });
+  }
+});
+```
+
+### Node.js (Standalone)
+
+For standalone Node.js applications:
+
+```typescript
+import { SMS } from '@clancydev/sms';
+
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+
+async function main() {
+  const message = await sms.otp.send({
+    to: '+15551234567',
+    code: '123456',
+    requestId: `otp_${Date.now()}`,
+  });
+  
+  console.log('Message sent:', message.id);
+}
+
+main();
+```
+
+<Info>
+  For production applications, prefer using the SDK in server-side code only. If you need to send SMS from a client application, create a backend API endpoint that uses the SDK.
+</Info>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Module not found error">
+    If you get a "Module not found" error, ensure:
+
+    1. The package is installed: `npm list @clancydev/sms`
+    2. You're using the correct import path: `import { SMS } from '@clancydev/sms'`
+    3. Your Node.js version is 18.0 or higher: `node --version`
+  </Accordion>
+  <Accordion title="API key not working">
+    If your API key isn't working:
+
+    1. Verify the API key in your workspace dashboard
+    2. Ensure there are no extra spaces or newlines in your environment variable
+    3. Check that you're using the correct environment variable name
+    4. Ensure your workspace is not paused or suspended
+  </Accordion>
+  <Accordion title="TypeScript errors">
+    If you see TypeScript errors:
+
+    1. Ensure your `tsconfig.json` includes the SDK's types
+    2. Verify you're using TypeScript 4.5 or higher
+    3. Try restarting your TypeScript server in your IDE
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+- [Quickstart](/docs/00-introduction/quickstart) — Send your first OTP
+- [Environment Variables](/docs/00-introduction/env-vars) — Configure environment settings
+- [Concepts](/docs/00-introduction/concepts) — Understand core platform concepts

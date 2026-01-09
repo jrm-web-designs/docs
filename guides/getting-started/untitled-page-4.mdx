@@ -1,0 +1,306 @@
+---
+title: 'Security Model'
+description: 'Authentication, authorization, and security features in Clancy SMS'
+---
+
+Clancy SMS implements multiple layers of security to protect your data and ensure only authorized access to your workspace.
+
+## Authentication
+
+Clancy SMS uses **API key authentication** for all API requests. Each request must include a valid API key in the `Authorization` header:
+
+```
+Authorization: Bearer sk_live_abc123...
+```
+
+<Info>
+API keys are workspace-scoped. Each API key belongs to exactly one workspace and can only access data from that workspace.
+</Info>
+
+## API Key Management
+
+### API Key Structure
+
+API keys are prefixed to indicate their type:
+
+- `sk_live_...` — Production API keys
+- `sk_test_...` — Test API keys
+
+### Creating API Keys
+
+Create API keys in your workspace dashboard:
+
+1. Navigate to API Keys section
+2. Click "Create API Key"
+3. Optionally name the key for identification
+4. Copy the key immediately—it's shown only once
+
+<Callout>
+**Save Your Keys**: API keys are hashed at rest and cannot be retrieved after creation. Save them securely when generated.
+</Callout>
+
+### Key Rotation
+
+Rotate API keys regularly for security:
+
+1. Create a new API key
+2. Update your application configuration
+3. Deploy with the new key
+4. Verify the new key works
+5. Delete the old API key
+
+This process ensures zero-downtime key rotation.
+
+<Info>
+You can have multiple active API keys per workspace. Create a new key before deleting the old one to avoid service interruption.
+</Info>
+
+## Authorization
+
+Authorization in Clancy SMS is based on **workspace isolation**:
+
+- API keys can only access data from their own workspace
+- Workspace data is isolated at the database level using Row Level Security (RLS)
+- API requests are automatically scoped to the workspace associated with the API key
+
+<Info>
+Workspace isolation is enforced by the platform, not your application code. You cannot override or bypass workspace boundaries.
+</Info>
+
+## Data Isolation
+
+### Multi-Tenancy
+
+Clancy SMS is a multi-tenant platform where:
+
+- Each workspace has completely isolated data
+- Messages, delivery events, and suppression lists are workspace-scoped
+- API keys cannot access data from other workspaces
+
+### Row Level Security (RLS)
+
+Database queries are automatically filtered by `workspace_id`:
+
+- All messages include `workspace_id`
+- API requests only return messages from the authenticated workspace
+- Cross-workspace data access is impossible
+
+<Info>
+RLS is enforced at the database level, providing defense-in-depth even if application logic has bugs.
+</Info>
+
+## API Key Security
+
+### Storage
+
+API keys are:
+
+- **Hashed at rest** using industry-standard hashing algorithms
+- **Never logged** in application logs or error messages
+- **Shown only once** at creation time
+- **Not recoverable** if lost—you must create a new key
+
+### Transmission
+
+API keys are transmitted over HTTPS:
+
+- All API requests use TLS 1.2 or higher
+- API keys are sent in the `Authorization` header, not URL parameters
+- Webhooks use HTTPS for secure delivery
+
+<Callout>
+**Never Expose Keys**: Never commit API keys to version control, expose them in client-side code, or include them in URLs or logs.
+</Callout>
+
+### Best Practices
+
+<AccordionGroup>
+  <Accordion title="Store keys in environment variables">
+
+**✅ Good**: Environment variables
+
+```typescript
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+```
+
+**❌ Bad**: Hardcoded keys
+
+```typescript
+const sms = new SMS('sk_live_abc123...'); // Never do this
+```
+
+  </Accordion>
+  <Accordion title="Use secrets management services">
+
+For production, use secrets management services:
+
+**AWS**: Secrets Manager or Parameter Store
+
+**GCP**: Secret Manager
+
+**Azure**: Key Vault
+
+**Vercel**: Environment Variables (automatically secure)
+
+  </Accordion>
+  <Accordion title="Rotate keys regularly">
+
+Rotate API keys periodically:
+
+1. Set a rotation schedule (e.g., every 90 days)
+2. Create new keys before deleting old ones
+3. Update applications incrementally
+4. Monitor for usage of old keys
+5. Delete old keys after verification
+
+  </Accordion>
+  <Accordion title="Use separate keys for environments">
+
+Use different API keys for different environments:
+
+- Production: `sk_live_...`
+- Staging: `sk_live_...` (different key)
+- Development: `sk_test_...`
+
+This limits blast radius if a key is compromised.
+
+  </Accordion>
+</AccordionGroup>
+
+## Request Security
+
+### HTTPS Only
+
+All API requests must use HTTPS:
+
+- HTTP requests are rejected
+- TLS 1.2 or higher is required
+- Invalid certificates are rejected
+
+### Request Signing
+
+Webhooks are signed to verify authenticity:
+
+- Clancy SMS signs webhook payloads
+- Verify signatures using the webhook secret
+- Reject unsigned or invalid webhooks
+
+<Info>
+Webhook signature verification prevents attackers from sending fake webhook events to your application.
+</Info>
+
+## Data Privacy
+
+### Message Content
+
+Message content is:
+
+- Stored securely in the database
+- Encrypted at rest
+- Not logged in full by default (only metadata)
+- Accessible only to the workspace that created it
+
+### Phone Numbers
+
+Phone numbers are:
+
+- Stored in normalized E.164 format
+- Used only for delivery purposes
+- Not shared with third parties
+- Removed from logs (only last 4 digits logged)
+
+<Info>
+Phone number data is treated as PII (Personally Identifiable Information) and protected accordingly.
+</Info>
+
+## Compliance
+
+### Regulatory Compliance
+
+Clancy SMS helps you comply with:
+
+- **TCPA** (Telephone Consumer Protection Act): Automatic STOP/START handling
+- **CAN-SPAM**: Transactional-only messaging prevents spam violations
+- **GDPR**: Data isolation and secure storage
+
+### Audit Logging
+
+All sensitive operations are logged:
+
+- API key creation and deletion
+- Policy violations
+- Workspace status changes
+- Admin actions
+
+<Info>
+Audit logs are retained for compliance and security investigation purposes.
+</Info>
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use the minimum required permissions">
+
+Each API key has the same permissions within its workspace. Use separate workspaces for different projects or environments to limit scope.
+
+  </Accordion>
+  <Accordion title="Monitor API key usage">
+
+Monitor API key usage for:
+
+Unusual patterns (e.g., unexpected spikes)
+
+Unauthorized access attempts
+
+Policy violations
+
+Set up alerts for suspicious activity.
+
+  </Accordion>
+  <Accordion title="Implement rate limiting in your application">
+
+Even though Clancy SMS enforces rate limits, implement application-level rate limiting to:
+
+Prevent accidental abuse
+
+Provide better user experience
+
+Reduce costs
+
+  </Accordion>
+  <Accordion title="Use webhook signature verification">
+
+Always verify webhook signatures:
+
+```typescript
+import crypto from 'crypto';
+
+function verifyWebhookSignature(payload: string, signature: string, secret: string): boolean {
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(payload)
+    .digest('hex');
+  
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expected)
+  );
+}
+```
+
+  </Accordion>
+</AccordionGroup>
+
+## Security Contact
+
+Report security vulnerabilities to: security@clancy.com
+
+<Callout>
+**Responsible Disclosure**: Please report security issues responsibly. Do not publicly disclose vulnerabilities until they're patched.
+</Callout>
+
+## Next Steps
+
+- [Concepts](/docs/00-introduction/concepts) — Understand core platform concepts
+- [Compliance and Suppression](/docs/00-introduction/compliance-and-suppression) — Learn about STOP/START handling
+- [API Reference: Authentication](/docs/03-api-reference/authentication) — API authentication details

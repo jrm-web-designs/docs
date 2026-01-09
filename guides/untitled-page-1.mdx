@@ -1,0 +1,92 @@
+---
+title: 'Overview'
+description: 'Introduction to Clancy SMS, a transactional SMS delivery platform optimized for OTP and security alerts'
+---
+
+Clancy SMS is a transactional SMS delivery platform built for developers who need reliable, compliant OTP delivery and security alerts. The platform is optimized for single-message sending with strict anti-abuse controls, automatic compliance handling, and a simple API that gets out of your way.
+
+## What is Clancy SMS?
+
+Clancy SMS handles the complexity of SMS delivery—provider integration, compliance, rate limiting, and delivery tracking—so you can focus on your application. The platform is purpose-built for transactional messaging: OTP codes, authentication alerts, security notifications, and other time-sensitive communications.
+
+<Info>
+Clancy SMS is transactional-only. The platform does not support marketing campaigns, promotional messages, or bulk broadcasts. If your use case involves marketing or promotional content, you'll need a different service.
+</Info>
+
+## Key Features
+
+Clancy SMS provides:
+
+- **OTP-first API** with a clean developer experience
+- **Automatic compliance** handling for STOP/START/HELP requests
+- **Built-in rate limiting** and anti-abuse controls to protect sender reputation
+- **Delivery tracking** with webhooks and status updates
+- **Idempotent sends** to prevent duplicate messages
+- **Multi-tenant workspaces** with API key authentication
+- **Provider abstraction** that isolates you from provider-specific details
+
+## What you'll learn
+
+This documentation covers:
+
+- How to install and configure the Clancy SMS client SDK
+- How to send OTP codes and transactional messages
+- How to handle delivery status updates and webhooks
+- How rate limits and ramping work for new workspaces
+- How the suppression list and compliance features work
+- How to test your integration before going to production
+
+## Architecture Overview
+
+Clancy SMS is a multi-tenant platform where each workspace has isolated data and API keys. When you send a message:
+
+1. **API Request**: Your application calls the Clancy SMS API with an idempotency key
+2. **Policy Check**: The platform validates rate limits, content policy, and suppression list
+3. **Queue**: Valid messages are queued for delivery
+4. **Worker Processing**: Background workers send messages via the configured provider
+5. **Status Updates**: Delivery events are tracked and webhooks notify you of status changes
+
+<Info>
+Messages are queued asynchronously. After a successful API response, your message is in a `pending` or `queued` state and will be sent shortly. Use webhooks or polling to track final delivery status.
+</Info>
+
+## Security Model
+
+Clancy SMS uses API key authentication. Each workspace can have multiple API keys, which are hashed at rest and shown only once at creation. All API requests are scoped to the workspace associated with the API key.
+
+Workspace data is isolated using Row Level Security (RLS), ensuring that API keys can only access data belonging to their workspace.
+
+<Callout>
+**API Key Security**: API keys are sensitive credentials. Never commit them to version control, expose them in client-side code, or log them. Store them in environment variables or a secrets management service.
+</Callout>
+
+## Supported Use Cases
+
+Clancy SMS is designed for:
+
+- **OTP delivery** for two-factor authentication and password resets
+- **Security alerts** for account activity and suspicious login attempts
+- **Transaction confirmations** for financial or sensitive operations
+- **Time-sensitive notifications** where delivery reliability matters
+
+The platform is not suitable for:
+
+- Marketing campaigns or promotional messages
+- Bulk broadcasts to large recipient lists
+- International sending (currently US-only)
+- MMS or rich media messages
+
+## Provider Integration
+
+Clancy SMS uses Twilio as the SMS provider, but the provider is abstracted behind an interface. You don't need to manage Twilio credentials or handle provider-specific details—the platform handles provider communication, error normalization, and retry logic.
+
+<Info>
+Provider details are implementation details. Your application code should not depend on which provider Clancy SMS uses. This abstraction allows the platform to switch providers or add redundancy without breaking your integration.
+</Info>
+
+## Next Steps
+
+- [Installation](/docs/00-introduction/installation) — Set up the SDK in your project
+- [Quickstart](/docs/00-introduction/quickstart) — Send your first OTP in minutes
+- [Concepts](/docs/00-introduction/concepts) — Understand core platform concepts
+- [Security Model](/docs/00-introduction/security-model) — Learn about authentication and security
