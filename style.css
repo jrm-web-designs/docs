@@ -1,0 +1,58 @@
+/* Sidebar font size - 13px */
+#sidebar,
+.sidebar,
+.sidebar-content,
+.sidebar *:not(.sidebar-group-icon),
+.navigation-items,
+.navigation-items * {
+  font-size: 13px !important;
+}
+
+/* Body content font size - 14px */
+body {
+  font-size: 14px !important;
+}
+
+#body-content,
+.body-content,
+.mdx-content,
+.content-area,
+.content-container {
+  font-size: 14px !important;
+}
+
+.mdx-content *:not(h1):not(h2):not(h3):not(h4):not(h5):not(h6),
+.content-area *:not(h1):not(h2):not(h3):not(h4):not(h5):not(h6) {
+  font-size: 14px !important;
+}
+
+/* Maintain heading relative sizes */
+.mdx-content h1,
+.content-area h1 {
+  font-size: 2.25em !important;
+}
+
+.mdx-content h2,
+.content-area h2 {
+  font-size: 1.875em !important;
+}
+
+.mdx-content h3,
+.content-area h3 {
+  font-size: 1.5em !important;
+}
+
+.mdx-content h4,
+.content-area h4 {
+  font-size: 1.25em !important;
+}
+
+.mdx-content h5,
+.content-area h5 {
+  font-size: 1.125em !important;
+}
+
+.mdx-content h6,
+.content-area h6 {
+  font-size: 1em !important;
+}

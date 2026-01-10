@@ -40,20 +40,39 @@
           {
             "group": "Integrations",
             "pages": [
-              "build/integratons/nextjs",
-              "build/integratons/express",
-              "build/integratons/authentication/overview",
-              "build/integratons/authentication/clerk",
-              "build/integratons/authentication/supabase",
-              "build/integratons/authentication/custom-auth"
+              "build/integrations/nextjs",
+              "build/integrations/express",
+              "build/integrations/authentication/overview",
+              "build/integrations/authentication/clerk",
+              "build/integrations/authentication/supabase",
+              "build/integrations/authentication/custom-auth"
             ]
           },
           {
-            "group": "Policies",
+            "group": "Workflows",
             "pages": [
-              "guides/getting-started/untitled-page-4",
-              "guides/getting-started/untitled-page-3",
-              "guides/getting-started/untitled-page-5"
+              "build/workflows/delivery-tracking",
+              "build/workflows/go-live",
+              "build/workflows/idempotency",
+              "build/workflows/otp",
+              "build/workflows/rate-limiting",
+              "build/workflows/testing",
+              "build/workflows/transactional-alerts"
+            ]
+          },
+          {
+            "group": "Trust",
+            "pages": [
+              "build/trust/acceptable-use",
+              "build/trust/compliance",
+              "build/trust/security",
+              "build/trust/sending-limits"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "build/troubleshooting/error-handling"
             ]
           }
         ]
@@ -105,6 +124,11 @@
    ]
   },
   "appearance": {
-    "default": "palm"
+    "default": "system"
+  },
+  "styling": {
+    "codeblocks": {
+      "theme": "system"
+    }
   }
 }
