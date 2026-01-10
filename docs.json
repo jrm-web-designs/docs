@@ -25,29 +25,27 @@
     },
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Build",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Foundations",
             "pages": [
-              "guides/untitled-page-1",
-              "guides/getting-started/untitled-page-6",
-              "guides/getting-started/untitled-page",
-              "guides/getting-started/untitled-page-1",
-              "guides/getting-started/untitled-page-2"
+              "build/foundations/overview",
+              "build/foundations/concepts",
+              "build/foundations/quickstart",
+              "build/foundations/installation",
+              "build/foundations/configuration"
             ]
           },
           {
-            "group": "Guides",
+            "group": "Integrations",
             "pages": [
-              "guides/guides/untitled-page-3",
-              "guides/guides/untitled-page-7",
-              "guides/guides/untitled-page-2",
-              "guides/guides/untitled-page",
-              "guides/guides/untitled-page-1",
-              "guides/guides/untitled-page-5",
-              "guides/guides/untitled-page-6",
-              "guides/guides/untitled-page-4"
+              "build/integratons/nextjs",
+              "build/integratons/express",
+              "build/integratons/authentication/overview",
+              "build/integratons/authentication/clerk",
+              "build/integratons/authentication/supabase",
+              "build/integratons/authentication/custom-auth"
             ]
           },
           {
@@ -91,7 +89,7 @@
     "primary": {
       "type": "button",
       "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
+      "href": "https://clancy-sms.com/dashboard"
     }
   },
   "contextual": {
@@ -107,6 +105,6 @@
    ]
   },
   "appearance": {
-    "default": "system"
+    "default": "palm"
   }
 }
