@@ -227,17 +227,17 @@ const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
 <AccordionGroup>
   <Accordion title="Never expose API keys in client-side code">
 
-**❌ Bad**: Exposing API key in browser code
+**Bad**: Exposing API key in browser code
 
 ```typescript Bad example icon="typescript" lines
-// ❌ NEVER DO THIS
+// NEVER DO THIS
 const sms = new SMS('sk_live_abc123...'); // Hardcoded key
 ```
 
-**✅ Good**: Use server-side API route
+**Good**: Use server-side API route
 
 ```typescript Good example icon="typescript" lines
-// ✅ Server-side API route
+// Server-side API route
 // app/api/send-otp/route.ts
 import { SMS } from '@clancydev/sms';
 

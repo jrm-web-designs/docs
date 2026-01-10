@@ -204,13 +204,13 @@ Idempotency keys ensure that retrying the same request doesn't create duplicate 
 - User ID only (multiple sends to same user conflict)
 
 ```typescript Idempotency key patterns icon="typescript" lines
-// ✅ Good: Deterministic and unique per intent
+// Good: Deterministic and unique per intent
 const requestId = `otp_${userId}_login_${Math.floor(Date.now() / 60000)}`; // Minute window
 
-// ❌ Bad: Random UUID defeats idempotency
+// Bad: Random UUID defeats idempotency
 const requestId = crypto.randomUUID();
 
-// ❌ Bad: Only timestamp (collisions possible)
+// Bad: Only timestamp (collisions possible)
 const requestId = `${Date.now()}`;
 ```
 
@@ -357,11 +357,11 @@ async function sendOTPWithErrorHandling(phoneNumber: string, code: string) {
 **Solution**: Always store the code (with expiration) before sending the SMS, or use a database transaction to ensure atomicity.
 
 ```typescript Code storage order icon="typescript" lines
-// ❌ Bad: Send before storing
+// Bad: Send before storing
 const message = await sms.otp.send({ to: phoneNumber, code: code, requestId });
 await db.otpCodes.create({ code, expires_at });
 
-// ✅ Good: Store first, then send
+// Good: Store first, then send
 await db.otpCodes.create({ code, expires_at });
 const message = await sms.otp.send({ to: phoneNumber, code: code, requestId });
 ```
@@ -374,10 +374,10 @@ const message = await sms.otp.send({ to: phoneNumber, code: code, requestId });
 **Solution**: Include a timestamp window or action identifier in the idempotency key to allow new codes after expiration.
 
 ```typescript Idempotency key reuse icon="typescript" lines
-// ❌ Bad: Same key reused
+// Bad: Same key reused
 const requestId = `otp_${userId}`; // Always same for user
 
-// ✅ Good: Unique per attempt
+// Good: Unique per attempt
 const requestId = `otp_${userId}_${Math.floor(Date.now() / 600000)}`; // New every 10 min
 ```
 
@@ -389,7 +389,7 @@ const requestId = `otp_${userId}_${Math.floor(Date.now() / 600000)}`; // New eve
 **Solution**: Check delivery status and provide alternative methods (e.g., resend option, email fallback).
 
 ```typescript Delivery failure handling icon="typescript" lines
-// ✅ Good: Check status and handle failures
+// Good: Check status and handle failures
 const message = await sms.otp.send({ to: phoneNumber, code: code, requestId });
 
 // After some time, check if delivered
@@ -410,10 +410,10 @@ setTimeout(async () => {
 **Solution**: Use reasonable expiration times (5-15 minutes) and allow resend after expiration.
 
 ```typescript Code expiration times icon="typescript" lines
-// ❌ Bad: Too short
+// Bad: Too short
 const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
 
-// ✅ Good: Reasonable expiration
+// Good: Reasonable expiration
 const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 ```
 

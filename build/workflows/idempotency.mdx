@@ -100,28 +100,28 @@ const requestId = `password_reset_${resetToken}`;
 
 ### Anti-Patterns
 
-**❌ Random UUIDs for retries**:
+**Random UUIDs for retries**:
 
 ```typescript
 // Bad: Each retry generates a new key, defeating idempotency
 const requestId = crypto.randomUUID();
 ```
 
-**❌ Only timestamp**:
+**Only timestamp**:
 
 ```typescript
 // Bad: High collision risk, especially with retries
 const requestId = `${Date.now()}`;
 ```
 
-**❌ Only user ID**:
+**Only user ID**:
 
 ```typescript
 // Bad: Multiple sends to same user conflict
 const requestId = `user_${userId}`;
 ```
 
-**❌ Empty or missing key**:
+**Empty or missing key**:
 
 ```typescript
 // Bad: Required field, will cause validation error
@@ -264,13 +264,13 @@ const message3 = await sms.otp.send({ requestId: key3, ... }); // Creates new me
 **Solution**: Use the same key for retries of the same operation.
 
 ```typescript
-// ❌ Bad: New key on each retry
+// Bad: New key on each retry
 for (let attempt = 0; attempt < maxRetries; attempt++) {
   const requestId = `otp_${Date.now()}_${attempt}`; // Different each time
   await sms.otp.send({ requestId, ... });
 }
 
-// ✅ Good: Same key for retries
+// Good: Same key for retries
 const requestId = `otp_${userId}_${window}`;
 for (let attempt = 0; attempt < maxRetries; attempt++) {
   await sms.otp.send({ requestId, ... }); // Same key
@@ -285,10 +285,10 @@ for (let attempt = 0; attempt < maxRetries; attempt++) {
 **Solution**: Use time windows or deterministic identifiers.
 
 ```typescript
-// ❌ Bad: Too specific (microsecond precision)
+// Bad: Too specific (microsecond precision)
 const requestId = `otp_${userId}_${Date.now()}_${process.hrtime()[1]}`;
 
-// ✅ Good: Time window
+// Good: Time window
 const requestId = `otp_${userId}_${Math.floor(Date.now() / 600000)}`;
 ```
 
@@ -300,10 +300,10 @@ const requestId = `otp_${userId}_${Math.floor(Date.now() / 600000)}`;
 **Solution**: Include action type or time window.
 
 ```typescript
-// ❌ Bad: Only user ID
+// Bad: Only user ID
 const requestId = `otp_${userId}`;
 
-// ✅ Good: Include action and time window
+// Good: Include action and time window
 const requestId = `otp_${userId}_login_${window}`;
 ```
 

@@ -3,9 +3,9 @@
   "theme": "palm",
   "name": "Clancy SMS",
   "colors": {
-    "primary": "#0a7794",
-    "light": "#06b7c9",
-    "dark": "#145280"
+    "primary": "#000000",
+    "light": "#000000",
+    "dark": "#ffffff"
   },
   "favicon": "/favicon.svg",
   "navigation": {
@@ -15,8 +15,8 @@
           "anchor": "Dashboard",
           "icon": "house",
           "color": {
-            "light": "#82e8f6",
-            "dark": "#82e8f6"
+            "light": "#000000",
+            "dark": "#ffffff"
           },
           "hidden": true,
           "href": "https://clancy-sms.com/dashboard"
@@ -99,10 +99,6 @@
       }
     ]
   },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
   "navbar": {
     "links": [],
     "primary": {
@@ -124,7 +120,8 @@
    ]
   },
   "appearance": {
-    "default": "system"
+    "default": "system",
+    "strict": true
   },
   "styling": {
     "codeblocks": "system"

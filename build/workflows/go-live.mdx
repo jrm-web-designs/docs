@@ -27,10 +27,10 @@ In this guide, you'll learn:
 **Never expose API keys**:
 
 ```typescript
-// ❌ Bad: Hardcoded key
+// Bad: Hardcoded key
 const sms = new SMS('sk_live_abc123...');
 
-// ✅ Good: Environment variable
+// Good: Environment variable
 const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
 ```
 
@@ -89,10 +89,10 @@ export async function POST(request: Request) {
 Never log sensitive data:
 
 ```typescript
-// ❌ Bad: Log full phone number
+// Bad: Log full phone number
 logger.info('Sending OTP', { phone_number: '+15551234567' });
 
-// ✅ Good: Log only last 4 digits
+// Good: Log only last 4 digits
 logger.info('Sending OTP', { 
   phone_number: '***4567', // Last 4 digits only
 });
@@ -221,10 +221,10 @@ async function retryWithBackoff<T>(
 Always use idempotency keys:
 
 ```typescript
-// ✅ Good: Deterministic idempotency key
+// Good: Deterministic idempotency key
 const requestId = `otp_${userId}_${Math.floor(Date.now() / 600000)}`;
 
-// ❌ Bad: Random UUID defeats idempotency
+// Bad: Random UUID defeats idempotency
 const requestId = crypto.randomUUID();
 ```
 

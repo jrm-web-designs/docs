@@ -219,10 +219,10 @@ async function sendOrderUpdate(phoneNumber: string, orderId: string, status: str
 SMS messages have a 160-character limit per segment. Keep messages concise:
 
 ```typescript
-// ✅ Good: Concise and clear
+// Good: Concise and clear
 const message = `New login from New York. If not you, secure account. Reply STOP to opt out.`;
 
-// ❌ Bad: Too long and verbose
+// Bad: Too long and verbose
 const message = `We have detected a new login attempt on your account from a device located in New York, New York. If this login attempt was not authorized by you, please take immediate action to secure your account by changing your password. If you would like to opt out of these security alerts, please reply with the word STOP.`;
 ```
 
@@ -231,10 +231,10 @@ const message = `We have detected a new login attempt on your account from a dev
 Provide clear action information:
 
 ```typescript
-// ✅ Good: Clear action
+// Good: Clear action
 const message = `Suspicious activity detected. Account temporarily locked. Reset password to unlock. Reply STOP to opt out.`;
 
-// ❌ Bad: Vague action
+// Bad: Vague action
 const message = `Suspicious activity detected. Reply STOP to opt out.`;
 ```
 
@@ -243,10 +243,10 @@ const message = `Suspicious activity detected. Reply STOP to opt out.`;
 Always include opt-out instructions:
 
 ```typescript
-// ✅ Good: Clear opt-out
+// Good: Clear opt-out
 const message = `Alert: ${details}. Reply STOP to opt out.`;
 
-// ❌ Bad: No opt-out
+// Bad: No opt-out
 const message = `Alert: ${details}.`;
 ```
 

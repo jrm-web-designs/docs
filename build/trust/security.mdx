@@ -117,13 +117,13 @@ API keys are transmitted over HTTPS:
 <AccordionGroup>
   <Accordion title="Store keys in environment variables">
 
-**✅ Good**: Environment variables
+**Good**: Environment variables
 
 ```typescript
 const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
 ```
 
-**❌ Bad**: Hardcoded keys
+**Bad**: Hardcoded keys
 
 ```typescript
 const sms = new SMS('sk_live_abc123...'); // Never do this

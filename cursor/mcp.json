@@ -1,0 +1,13 @@
+{
+    "mcpServers": {
+      "supabase": {
+        "url": "https://mcp.supabase.com/mcp?project_ref=ijcigoduecjdklvenhnq",
+        "headers": {}
+      },
+      "Mint Starter Kit": {
+        "name": "Mint Starter Kit",
+        "url": "https://docs.clancy-sms.com/mcp",
+        "headers": {}
+      }
+    }
+  }
