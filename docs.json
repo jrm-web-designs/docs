@@ -127,8 +127,6 @@
     "default": "system"
   },
   "styling": {
-    "codeblocks": {
-      "theme": "system"
-    }
+    "codeblocks": "system"
   }
 }
