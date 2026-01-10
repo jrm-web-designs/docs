@@ -1,0 +1,422 @@
+---
+title: 'Production Readiness'
+description: 'Prepare your Clancy SMS integration for production deployment'
+---
+
+Ensure your Clancy SMS integration is ready for production. This guide covers security, reliability, monitoring, error handling, and best practices for production deployments.
+
+<Info>
+**Prerequisites**: Completed integration and testing. Familiarity with production deployment practices is helpful.
+</Info>
+
+## What you'll learn
+
+In this guide, you'll learn:
+
+- Security best practices for production
+- Reliability and error handling
+- Monitoring and alerting
+- Performance optimization
+- Compliance and legal considerations
+- Production deployment checklist
+
+## Security
+
+### API Key Management
+
+**Never expose API keys**:
+
+```typescript
+// ❌ Bad: Hardcoded key
+const sms = new SMS('sk_live_abc123...');
+
+// ✅ Good: Environment variable
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+```
+
+**Use secrets management services**:
+- **AWS**: Secrets Manager or Parameter Store
+- **GCP**: Secret Manager
+- **Azure**: Key Vault
+- **Vercel**: Environment Variables (automatically secure)
+- **Heroku**: Config Vars
+
+**Rotate keys regularly**:
+1. Create new API key
+2. Update environment variables
+3. Deploy with new key
+4. Verify new key works
+5. Delete old key
+
+<Callout>
+**Key Rotation**: Rotate API keys periodically (e.g., every 90 days) for security. Create new keys before deleting old ones to avoid downtime.
+</Callout>
+
+### Webhook Security
+
+Always verify webhook signatures:
+
+```typescript
+import crypto from 'crypto';
+
+function verifyWebhookSignature(payload: string, signature: string, secret: string): boolean {
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(payload)
+    .digest('hex');
+  
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expected)
+  );
+}
+
+// In webhook endpoint
+export async function POST(request: Request) {
+  const signature = request.headers.get('X-Clancy-Signature');
+  const rawBody = await request.text();
+  
+  if (!verifyWebhookSignature(rawBody, signature, process.env.WEBHOOK_SECRET!)) {
+    return new Response('Invalid signature', { status: 403 });
+  }
+  
+  // Process webhook
+}
+```
+
+### Data Privacy
+
+Never log sensitive data:
+
+```typescript
+// ❌ Bad: Log full phone number
+logger.info('Sending OTP', { phone_number: '+15551234567' });
+
+// ✅ Good: Log only last 4 digits
+logger.info('Sending OTP', { 
+  phone_number: '***4567', // Last 4 digits only
+});
+
+// Never log API keys or OTP codes
+```
+
+## Reliability
+
+### Error Handling
+
+Implement comprehensive error handling:
+
+```typescript
+import {
+  SMS,
+  AuthenticationError,
+  ValidationError,
+  PolicyBlockedError,
+  ServerError,
+} from '@clancydev/sms';
+
+async function sendOTPWithProductionErrorHandling(
+  phoneNumber: string,
+  code: string,
+  requestId: string
+) {
+  try {
+    const message = await sms.otp.send({
+      to: phoneNumber,
+      code: code,
+      requestId: requestId,
+    });
+    
+    return { success: true, message };
+  } catch (error) {
+    // Log error with context (sanitized)
+    logger.error('OTP send failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      error_code: error instanceof ClancyError ? error.code : undefined,
+      request_id: requestId,
+      phone_number: sanitizePhone(phoneNumber), // Last 4 digits only
+    });
+    
+    // Handle specific errors
+    if (error instanceof AuthenticationError) {
+      // Critical: API key issue - alert immediately
+      await alertCritical('API key authentication failed');
+      return { success: false, error: 'AUTH_ERROR' };
+    }
+    
+    if (error instanceof ValidationError) {
+      // User input error - don't retry
+      return { success: false, error: 'VALIDATION_ERROR' };
+    }
+    
+    if (error instanceof PolicyBlockedError) {
+      if (error.code === 'RECIPIENT_SUPPRESSED') {
+        // Respect opt-out - don't retry
+        return { success: false, error: 'RECIPIENT_SUPPRESSED' };
+      }
+      if (error.code === 'RATE_LIMIT_EXCEEDED') {
+        // Rate limited - retry with backoff
+        return await retryWithBackoff(() => sendOTP(...));
+      }
+    }
+    
+    if (error instanceof ServerError) {
+      // Transient error - retry with backoff
+      return await retryWithBackoff(() => sendOTP(...));
+    }
+    
+    // Unknown error - don't retry
+    return { success: false, error: 'UNKNOWN_ERROR' };
+  }
+}
+```
+
+### Retry Logic
+
+Implement retry logic with exponential backoff:
+
+```typescript
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  options: {
+    maxRetries?: number;
+    baseDelay?: number;
+    maxDelay?: number;
+  } = {}
+): Promise<T> {
+  const { maxRetries = 3, baseDelay = 1000, maxDelay = 60000 } = options;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      // Don't retry on permanent errors
+      if (error instanceof AuthenticationError ||
+          error instanceof ValidationError ||
+          (error instanceof PolicyBlockedError && 
+           error.code !== 'RATE_LIMIT_EXCEEDED')) {
+        throw error;
+      }
+      
+      if (attempt === maxRetries - 1) {
+        throw error;
+      }
+      
+      const delay = Math.min(
+        baseDelay * Math.pow(2, attempt) + Math.random() * 1000,
+        maxDelay
+      );
+      
+      logger.info('Retrying after backoff', { attempt, delay });
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw new Error('Max retries exceeded');
+}
+```
+
+### Idempotency
+
+Always use idempotency keys:
+
+```typescript
+// ✅ Good: Deterministic idempotency key
+const requestId = `otp_${userId}_${Math.floor(Date.now() / 600000)}`;
+
+// ❌ Bad: Random UUID defeats idempotency
+const requestId = crypto.randomUUID();
+```
+
+## Monitoring
+
+### Metrics to Track
+
+Monitor these metrics:
+
+- **Delivery rates**: Success vs. failure rates
+- **Rate limit errors**: Frequency and patterns
+- **Error rates**: By error type (auth, validation, policy, server)
+- **Latency**: API response times
+- **Volume**: Messages sent per hour/day
+- **Delivery times**: Time from send to delivery
+
+### Logging
+
+Log important events:
+
+```typescript
+// Log OTP send attempts
+logger.info('OTP send initiated', {
+  request_id: requestId,
+  user_id: userId,
+  phone_number: sanitizePhone(phoneNumber),
+});
+
+// Log successful delivery
+logger.info('OTP delivered', {
+  message_id: message.id,
+  request_id: requestId,
+  delivery_time_ms: deliveryTime,
+});
+
+// Log failures
+logger.error('OTP send failed', {
+  error_code: error.code,
+  error_message: error.message,
+  request_id: requestId,
+  phone_number: sanitizePhone(phoneNumber),
+});
+```
+
+### Alerting
+
+Set up alerts for critical issues:
+
+```typescript
+// Alert on high error rates
+if (errorRate > 0.1) { // 10% error rate
+  await alert('High error rate detected', {
+    error_rate: errorRate,
+    time_window: '1 hour',
+  });
+}
+
+// Alert on authentication failures (critical)
+if (error instanceof AuthenticationError) {
+  await alertCritical('API key authentication failed');
+}
+
+// Alert on delivery failures
+if (deliveryFailureRate > 0.05) { // 5% failure rate
+  await alert('High delivery failure rate', {
+    failure_rate: deliveryFailureRate,
+  });
+}
+```
+
+## Performance
+
+### Rate Limiting
+
+Implement application-level rate limiting:
+
+```typescript
+class RateLimiter {
+  private requests: Map<string, number[]> = new Map();
+  
+  async checkLimit(key: string, limit: number, windowMs: number): Promise<boolean> {
+    const now = Date.now();
+    const requests = this.requests.get(key) || [];
+    const recentRequests = requests.filter(time => now - time < windowMs);
+    
+    if (recentRequests.length >= limit) {
+      return false;
+    }
+    
+    recentRequests.push(now);
+    this.requests.set(key, recentRequests);
+    return true;
+  }
+}
+```
+
+### Connection Pooling
+
+Use connection pooling for HTTP requests:
+
+```typescript
+// Use HTTP agent with connection pooling (Node.js)
+import https from 'https';
+
+const agent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 50,
+});
+
+// Pass to fetch options (if using custom fetch)
+const response = await fetch(url, {
+  agent,
+});
+```
+
+## Compliance
+
+### TCPA Compliance
+
+Ensure TCPA compliance:
+
+- **Obtain consent**: Get explicit consent before sending
+- **Include opt-out**: Always include "Reply STOP to opt out"
+- **Respect opt-outs**: Don't send to suppressed recipients
+- **Document consent**: Record when and how consent was obtained
+
+### Data Retention
+
+Follow data retention policies:
+
+- **OTP codes**: Delete after expiration (typically 10-15 minutes)
+- **Message logs**: Retain for compliance period (check local regulations)
+- **Phone numbers**: Store only as long as necessary
+
+## Production Checklist
+
+<AccordionGroup>
+  <Accordion title="Security checklist">
+
+- API keys stored in environment variables or secrets manager
+- API keys never logged or committed to version control
+- Webhook signatures verified
+- Sensitive data not logged (phone numbers, OTP codes)
+- HTTPS used for all API requests
+- API keys rotated periodically
+- Test keys separated from production keys
+
+</Accordion>
+
+  <Accordion title="Reliability checklist">
+
+- Error handling implemented for all error types
+- Retry logic with exponential backoff
+- Idempotency keys used correctly
+- Rate limit handling implemented
+- Webhook delivery handling (idempotent)
+- Timeout handling for long operations
+
+</Accordion>
+
+  <Accordion title="Monitoring checklist">
+
+- Logging configured with appropriate levels
+- Metrics tracked (delivery rates, error rates, latency)
+- Alerts configured for critical issues
+- Dashboard/monitoring tools set up
+- Error tracking service integrated (Sentry, etc.)
+
+</Accordion>
+
+  <Accordion title="Performance checklist">
+
+- Application-level rate limiting implemented
+- Connection pooling configured
+- Caching where appropriate
+- Async processing for non-critical operations
+
+</Accordion>
+
+  <Accordion title="Compliance checklist">
+
+- TCPA compliance verified
+- Opt-out instructions included in messages
+- Consent documented
+- Data retention policies followed
+- Privacy policy updated
+
+</Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+- [Testing Guide](/docs/guides/testing) — Test your integration
+- [Error Handling Guide](/docs/guides/handling-errors) — Handle errors in production
+- [Security Model](/docs/policies/security-model) — Security best practices

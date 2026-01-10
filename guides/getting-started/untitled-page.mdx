@@ -70,15 +70,10 @@ const sms = new SMS(process.env.CLANCY_SMS_API_KEY!, {
 
 ### Configuration Options
 
-<Fields>
-  <Field name="apiKey" type="string" required>
-    Your Clancy SMS API key. Get this from your workspace dashboard.
-  </Field>
-
-  <Field name="options.baseUrl" type="string" optional>
-    Custom API base URL. Defaults to `https://api.clancy.com` in production or the current origin in browser environments. Use this for testing with a custom instance or local development.
-  </Field>
-</Fields>
+| Parameter         | Type     | Required | Description                                                                                                                                                                              |
+| ----------------- | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiKey`          | `string` | Yes      | Your Clancy SMS API key. Get this from your workspace dashboard.                                                                                                                         |
+| `options.baseUrl` | `string` | No       | Custom API base URL. Defaults to `https://api.clancy.com` in production or the current origin in browser environments. Use this for testing with a custom instance or local development. |
 
 ## Verify Installation
 

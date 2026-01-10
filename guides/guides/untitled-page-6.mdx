@@ -1,0 +1,332 @@
+---
+title: 'Testing'
+description: 'Test your Clancy SMS integration with test API keys, mocking, and test phone numbers'
+---
+
+Learn how to test your Clancy SMS integration. This guide covers test API keys, test phone numbers, mocking, and best practices for testing in development and staging environments.
+
+<Info>
+**Prerequisites**: Basic understanding of testing concepts and your testing framework (Jest, Vitest, etc.). Familiarity with the Clancy SMS SDK is helpful.
+</Info>
+
+## What you'll learn
+
+In this guide, you'll learn:
+
+- How to use test API keys
+- Test phone numbers and validation
+- Mocking the Clancy SMS SDK
+- Testing error scenarios
+- Integration testing strategies
+- Best practices for testing
+
+## Test API Keys
+
+Use **test API keys** for development and testing:
+
+- **Prefix**: `sk_test_...` (vs. `sk_live_...` for production)
+- **Behavior**: Same API behavior as production keys
+- **Limits**: May have different rate limits for testing
+- **Cost**: Test messages may not be charged (check your plan)
+
+<Info>
+Test API keys work exactly like production keys but are meant for development and testing. Create test keys in your workspace dashboard separate from production keys.
+</Info>
+
+### Using Test Keys
+
+Configure test keys in your environment:
+
+```typescript
+// .env.test or .env.local
+CLANCY_SMS_API_KEY=sk_test_abc123def456ghi789
+
+// In your code
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+
+// Test key is automatically used
+const message = await sms.otp.send({
+  to: '+15551234567',
+  code: '123456',
+  requestId: 'test_123',
+});
+```
+
+## Test Phone Numbers
+
+Use test phone numbers for development:
+
+### Twilio Test Numbers
+
+If using Twilio as the provider, Twilio provides test numbers that simulate delivery:
+
+- **Successful delivery**: `+15005550006`
+- **Failed delivery**: `+15005550001`
+- **Invalid number**: `+15005550000`
+
+```typescript
+// Test successful delivery
+const message1 = await sms.otp.send({
+  to: '+15005550006', // Twilio test number for success
+  code: '123456',
+  requestId: 'test_success',
+});
+
+// Test failed delivery
+const message2 = await sms.otp.send({
+  to: '+15005550001', // Twilio test number for failure
+  code: '123456',
+  requestId: 'test_failure',
+});
+```
+
+<Info>
+Provider-specific test numbers may vary. Check your provider's documentation for test number options. Clancy SMS may provide its own test numbers in the future.
+</Info>
+
+### Your Own Test Numbers
+
+Use your own test phone numbers for end-to-end testing:
+
+```typescript
+// Use your own test number
+const TEST_PHONE_NUMBER = process.env.TEST_PHONE_NUMBER || '+15551234567';
+
+const message = await sms.otp.send({
+  to: TEST_PHONE_NUMBER,
+  code: '123456',
+  requestId: `test_${Date.now()}`,
+});
+```
+
+<Callout>
+**Real Messages**: Using your own phone number will send real SMS messages. Use sparingly and be aware of rate limits and costs.
+</Callout>
+
+## Mocking the SDK
+
+Mock the Clancy SMS SDK for unit tests:
+
+### Jest/Vitest Mocking
+
+Mock the SDK in your tests:
+
+```typescript
+import { SMS } from '@clancydev/sms';
+
+// Mock the SMS class
+jest.mock('@clancydev/sms', () => ({
+  SMS: jest.fn().mockImplementation(() => ({
+    otp: {
+      send: jest.fn(),
+    },
+    messages: {
+      get: jest.fn(),
+      list: jest.fn(),
+    },
+  })),
+}));
+
+describe('OTP sending', () => {
+  it('sends OTP successfully', async () => {
+    const sms = new SMS('test-key');
+    
+    // Mock successful response
+    (sms.otp.send as jest.Mock).mockResolvedValue({
+      id: 'msg_test123',
+      status: 'pending',
+      to: '+15551234567',
+      created_at: '2024-01-15T10:30:00Z',
+    });
+    
+    const message = await sms.otp.send({
+      to: '+15551234567',
+      code: '123456',
+      requestId: 'test_123',
+    });
+    
+    expect(message.id).toBe('msg_test123');
+    expect(message.status).toBe('pending');
+  });
+  
+  it('handles rate limit errors', async () => {
+    const sms = new SMS('test-key');
+    const { PolicyBlockedError } = require('@clancydev/sms');
+    
+    // Mock rate limit error
+    (sms.otp.send as jest.Mock).mockRejectedValue(
+      new PolicyBlockedError(
+        'Rate limit exceeded',
+        'rate_limit',
+        'Please wait before sending more messages'
+      )
+    );
+    
+    await expect(
+      sms.otp.send({
+        to: '+15551234567',
+        code: '123456',
+        requestId: 'test_123',
+      })
+    ).rejects.toThrow(PolicyBlockedError);
+  });
+});
+```
+
+### Manual Mocking
+
+Create a manual mock for more control:
+
+```typescript
+// __mocks__/@clancydev/sms.ts
+import { ClancyError, PolicyBlockedError, ValidationError } from '@clancydev/sms';
+
+export class SMS {
+  constructor(apiKey: string) {
+    // Store API key for validation
+    if (!apiKey || !apiKey.startsWith('sk_')) {
+      throw new Error('Invalid API key format');
+    }
+  }
+  
+  otp = {
+    send: jest.fn(),
+  };
+  
+  messages = {
+    get: jest.fn(),
+    list: jest.fn(),
+  };
+  
+  status = {
+    get: jest.fn(),
+  };
+}
+
+// Export error classes for use in tests
+export { ClancyError, PolicyBlockedError, ValidationError };
+```
+
+## Testing Error Scenarios
+
+Test error handling:
+
+### Authentication Errors
+
+```typescript
+it('handles authentication errors', async () => {
+  const { AuthenticationError } = require('@clancydev/sms');
+  const sms = new SMS('invalid-key');
+  
+  (sms.otp.send as jest.Mock).mockRejectedValue(
+    new AuthenticationError('Invalid API key')
+  );
+  
+  await expect(
+    sms.otp.send({
+      to: '+15551234567',
+      code: '123456',
+      requestId: 'test_123',
+    })
+  ).rejects.toThrow(AuthenticationError);
+});
+```
+
+### Validation Errors
+
+```typescript
+it('handles validation errors', async () => {
+  const { ValidationError } = require('@clancydev/sms');
+  const sms = new SMS('test-key');
+  
+  (sms.otp.send as jest.Mock).mockRejectedValue(
+    new ValidationError('Phone number must be in E.164 format')
+  );
+  
+  await expect(
+    sms.otp.send({
+      to: 'invalid-number', // Invalid format
+      code: '123456',
+      requestId: 'test_123',
+    })
+  ).rejects.toThrow(ValidationError);
+});
+```
+
+### Policy Blocked Errors
+
+```typescript
+it('handles recipient suppressed errors', async () => {
+  const { PolicyBlockedError } = require('@clancydev/sms');
+  const sms = new SMS('test-key');
+  
+  (sms.otp.send as jest.Mock).mockRejectedValue(
+    new PolicyBlockedError(
+      'Recipient has opted out',
+      'content_block',
+      'This recipient has opted out'
+    )
+  );
+  
+  await expect(
+    sms.otp.send({
+      to: '+15551234567',
+      code: '123456',
+      requestId: 'test_123',
+    })
+  ).rejects.toThrow(PolicyBlockedError);
+});
+```
+
+## Integration Testing
+
+Test end-to-end flows with real API calls (using test keys):
+
+```typescript
+describe('OTP flow integration', () => {
+  const TEST_API_KEY = process.env.CLANCY_SMS_TEST_API_KEY;
+  const TEST_PHONE = process.env.TEST_PHONE_NUMBER;
+  
+  if (!TEST_API_KEY || !TEST_PHONE) {
+    test.skip('Integration tests require CLANCY_SMS_TEST_API_KEY and TEST_PHONE_NUMBER');
+    return;
+  }
+  
+  it('sends OTP end-to-end', async () => {
+    const sms = new SMS(TEST_API_KEY);
+    
+    const message = await sms.otp.send({
+      to: TEST_PHONE,
+      code: '123456',
+      requestId: `integration_test_${Date.now()}`,
+    });
+    
+    expect(message.id).toBeDefined();
+    expect(message.status).toBe('pending');
+    
+    // Optionally poll for delivery status
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    const updated = await sms.messages.get(message.id);
+    expect(['pending', 'queued', 'sent', 'delivered']).toContain(updated.status);
+  }, 30000); // 30 second timeout for integration test
+});
+```
+
+## Testing Best Practices
+
+- **Use test API keys**: Separate test keys from production keys
+- **Mock in unit tests**: Mock the SDK for fast, isolated unit tests
+- **Use test numbers**: Use provider test numbers or your own test numbers
+- **Test error scenarios**: Test all error types and edge cases
+- **Integration tests sparingly**: Use real API calls only for integration tests
+- **Clean up test data**: Clean up test messages and codes after tests
+- **Use environment variables**: Configure test keys via environment variables
+- **Test idempotency**: Verify idempotency keys work correctly
+- **Test rate limits**: Verify rate limit handling (with mocks or test keys)
+
+## Next Steps
+
+- [Production Readiness Guide](/docs/guides/production-readiness) — Prepare for production
+- [Error Handling Guide](/docs/guides/handling-errors) — Handle errors in production
+- [API Reference](/docs/api-reference/send-message) — Complete API documentation

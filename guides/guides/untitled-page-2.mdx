@@ -1,0 +1,326 @@
+---
+title: 'Idempotency'
+description: 'How to use idempotency keys to ensure reliable, duplicate-free message sends'
+---
+
+Idempotency ensures that sending the same request multiple times results in only one message being created. This guide explains how idempotency works in Clancy SMS and how to implement it correctly.
+
+<Info>
+**Prerequisites**: Basic understanding of HTTP retries and API design. Familiarity with OTP sending is helpful but not required.
+</Info>
+
+## What you'll learn
+
+In this guide, you'll learn:
+
+- What idempotency is and why it matters
+- How idempotency keys work in Clancy SMS
+- How to generate effective idempotency keys
+- Common patterns and anti-patterns
+- How to handle idempotent retries
+
+## What is Idempotency?
+
+An idempotent operation is one that produces the same result regardless of how many times it's executed. In the context of SMS sending:
+
+- **First request**: Creates a new message and returns the message object
+- **Subsequent requests with same key**: Returns the original message without creating a duplicate
+
+This is crucial for reliable systems where network failures, timeouts, or application errors can cause automatic retries.
+
+<Info>
+Idempotency prevents duplicate messages when retrying after network errors or timeouts. Without it, a retry could send the same OTP code twice, confusing users or creating security issues.
+</Info>
+
+## How Idempotency Works
+
+When you send a message with an idempotency key (`requestId` in the SDK), Clancy SMS:
+
+1. **Checks for existing message** with the same idempotency key in your workspace
+2. **If found**: Returns the existing message immediately (no duplicate created)
+3. **If not found**: Creates a new message and associates it with the idempotency key
+
+The idempotency check is atomic—even if two requests arrive simultaneously with the same key, only one message will be created.
+
+```typescript
+// First request creates a message
+const message1 = await sms.otp.send({
+  to: '+15551234567',
+  code: '123456',
+  requestId: 'login_attempt_abc123',
+});
+
+// Retry with the same idempotency key returns the original message
+const message2 = await sms.otp.send({
+  to: '+15551234567',
+  code: '123456',
+  requestId: 'login_attempt_abc123', // Same key
+});
+
+// message1.id === message2.id (same message)
+```
+
+## Generating Idempotency Keys
+
+Effective idempotency keys must be:
+
+- **Unique per distinct operation**: Each separate send intent should have a unique key
+- **Deterministic**: The same operation should always generate the same key
+- **Workspace-scoped**: Keys are scoped to your workspace (different workspaces can use same keys)
+
+### Good Patterns
+
+**User action + timestamp window** (recommended for OTP):
+
+```typescript
+// Unique per user action within a time window
+const requestId = `otp_${userId}_login_${Math.floor(Date.now() / 600000)}`; // 10-minute window
+```
+
+**Session + action**:
+
+```typescript
+// Unique per session action
+const requestId = `login_${sessionId}_${actionType}`;
+```
+
+**Transaction ID**:
+
+```typescript
+// Use your own transaction identifier
+const requestId = `payment_${transactionId}_otp`;
+```
+
+**Request token**:
+
+```typescript
+// For password reset flows
+const requestId = `password_reset_${resetToken}`;
+```
+
+### Anti-Patterns
+
+**❌ Random UUIDs for retries**:
+
+```typescript
+// Bad: Each retry generates a new key, defeating idempotency
+const requestId = crypto.randomUUID();
+```
+
+**❌ Only timestamp**:
+
+```typescript
+// Bad: High collision risk, especially with retries
+const requestId = `${Date.now()}`;
+```
+
+**❌ Only user ID**:
+
+```typescript
+// Bad: Multiple sends to same user conflict
+const requestId = `user_${userId}`;
+```
+
+**❌ Empty or missing key**:
+
+```typescript
+// Bad: Required field, will cause validation error
+await sms.otp.send({ to: phoneNumber, code: code }); // Missing requestId
+```
+
+## Idempotency in Practice
+
+### Retry Logic
+
+Implement retry logic with idempotency keys:
+
+```typescript
+async function sendOTPWithRetry(
+  phoneNumber: string,
+  code: string,
+  userId: string,
+  maxRetries: number = 3
+) {
+  // Generate deterministic idempotency key
+  const requestId = `otp_${userId}_${Math.floor(Date.now() / 600000)}`;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const message = await sms.otp.send({
+        to: phoneNumber,
+        code: code,
+        requestId: requestId, // Same key on retry
+      });
+      
+      return { success: true, message };
+    } catch (error) {
+      // Only retry on transient errors (network, timeout)
+      if (isRetryableError(error) && attempt < maxRetries - 1) {
+        await delay(Math.pow(2, attempt) * 1000); // Exponential backoff
+        continue;
+      }
+      
+      throw error;
+    }
+  }
+  
+  throw new Error('Max retries exceeded');
+}
+
+function isRetryableError(error: unknown): boolean {
+  // Retry on network errors, timeouts, 5xx errors
+  // Don't retry on validation errors, auth errors, policy blocks
+  if (error instanceof NetworkError || error instanceof TimeoutError) {
+    return true;
+  }
+  if (error instanceof ServerError) {
+    return true;
+  }
+  return false;
+}
+```
+
+<Callout>
+**Retry Strategy**: Only retry on transient errors (network failures, timeouts, 5xx errors). Don't retry on validation errors, authentication failures, or policy violations—these won't succeed on retry and will waste resources.
+</Callout>
+
+### Handling Concurrent Requests
+
+If your application might send concurrent requests with the same intent, use the same idempotency key:
+
+```typescript
+// Multiple concurrent requests with same key
+const requestId = `otp_${userId}_login_${Math.floor(Date.now() / 600000)}`;
+
+// Request 1 (arrives first)
+const promise1 = sms.otp.send({ to: phoneNumber, code: code, requestId });
+
+// Request 2 (arrives 100ms later, same key)
+const promise2 = sms.otp.send({ to: phoneNumber, code: code, requestId });
+
+// Both resolve to the same message
+const [message1, message2] = await Promise.all([promise1, promise2]);
+// message1.id === message2.id
+```
+
+<Info>
+Concurrent requests with the same idempotency key are safe. The database-level unique constraint ensures only one message is created, and both requests receive the same message object.
+</Info>
+
+## Idempotency Key Scope
+
+Idempotency keys are **workspace-scoped**:
+
+- The same key used by different workspaces creates separate messages
+- Keys from one workspace don't conflict with keys from another workspace
+- Use consistent key formats within your application
+
+```typescript
+// Workspace A uses key "otp_user123"
+const messageA = await smsWorkspaceA.otp.send({ requestId: 'otp_user123', ... });
+
+// Workspace B uses same key "otp_user123"
+const messageB = await smsWorkspaceB.otp.send({ requestId: 'otp_user123', ... });
+
+// These are different messages (different workspace_id)
+// messageA.id !== messageB.id
+```
+
+## Key Expiration and Rotation
+
+Idempotency keys don't expire. Once a message is created with a key, that key will always return the same message.
+
+For scenarios where you want to allow new messages after a time period (e.g., OTP codes expire after 10 minutes), include a timestamp window in your key:
+
+```typescript
+// Key changes every 10 minutes, allowing new OTP after expiration
+function generateOTPKey(userId: string): string {
+  const windowMinutes = 10;
+  const windowMs = windowMinutes * 60 * 1000;
+  const window = Math.floor(Date.now() / windowMs);
+  return `otp_${userId}_${window}`;
+}
+
+// First send (minute 0-9)
+const key1 = generateOTPKey('user123'); // "otp_user123_12345"
+const message1 = await sms.otp.send({ requestId: key1, ... });
+
+// Retry within same window (minute 5) - returns same message
+const key2 = generateOTPKey('user123'); // "otp_user123_12345" (same)
+const message2 = await sms.otp.send({ requestId: key2, ... }); // Returns message1
+
+// After window expires (minute 11) - new key, new message
+const key3 = generateOTPKey('user123'); // "otp_user123_12346" (different)
+const message3 = await sms.otp.send({ requestId: key3, ... }); // Creates new message
+```
+
+## Common Mistakes
+
+<AccordionGroup>
+  <Accordion title="Changing key on retry">
+
+**Problem**: Generating a new key on retry defeats idempotency protection.
+
+**Solution**: Use the same key for retries of the same operation.
+
+```typescript
+// ❌ Bad: New key on each retry
+for (let attempt = 0; attempt < maxRetries; attempt++) {
+  const requestId = `otp_${Date.now()}_${attempt}`; // Different each time
+  await sms.otp.send({ requestId, ... });
+}
+
+// ✅ Good: Same key for retries
+const requestId = `otp_${userId}_${window}`;
+for (let attempt = 0; attempt < maxRetries; attempt++) {
+  await sms.otp.send({ requestId, ... }); // Same key
+}
+```
+
+  </Accordion>
+  <Accordion title="Key too specific">
+
+**Problem**: Including volatile data (e.g., exact timestamp) makes keys unique even for intended retries.
+
+**Solution**: Use time windows or deterministic identifiers.
+
+```typescript
+// ❌ Bad: Too specific (microsecond precision)
+const requestId = `otp_${userId}_${Date.now()}_${process.hrtime()[1]}`;
+
+// ✅ Good: Time window
+const requestId = `otp_${userId}_${Math.floor(Date.now() / 600000)}`;
+```
+
+  </Accordion>
+  <Accordion title="Key too generic">
+
+**Problem**: Using only user ID means only one OTP can be sent per user ever.
+
+**Solution**: Include action type or time window.
+
+```typescript
+// ❌ Bad: Only user ID
+const requestId = `otp_${userId}`;
+
+// ✅ Good: Include action and time window
+const requestId = `otp_${userId}_login_${window}`;
+```
+
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+- **Be deterministic**: Same operation should generate the same key
+- **Include time windows**: For time-sensitive operations (OTP), include time windows
+- **Don't include random data**: Random values defeat idempotency
+- **Keep keys reasonable length**: Maximum 255 characters
+- **Use consistent formats**: Standardize key formats across your application
+- **Document key patterns**: Document how keys are generated for your team
+
+## Next Steps
+
+- [OTP Delivery Guide](/docs/guides/otp-delivery) — Implement OTP sending with idempotency
+- [Error Handling Guide](/docs/guides/handling-errors) — Handle retries and failures
+- [API Reference: Send Message](/docs/api-reference/send-message) — Complete API documentation

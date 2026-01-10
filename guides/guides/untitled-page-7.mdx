@@ -1,0 +1,338 @@
+---
+title: "Transactional Alerts"
+description: "Send security alerts, notifications, and other transactional messages"
+---
+
+Learn how to send transactional alerts beyond OTP codes. This guide covers security alerts, account notifications, transaction confirmations, and other time-sensitive transactional messages.
+
+<Info>
+  **Prerequisites**: Basic understanding of message sending with Clancy SMS. Familiarity with OTP delivery is helpful but not required.
+</Info>
+
+## What you'll learn
+
+In this guide, you'll learn:
+
+- What counts as transactional messaging
+- How to send transactional alerts
+- Best practices for alert messaging
+- Security alert examples
+- Account notification examples
+- Content policy for transactional messages
+
+## What is Transactional Messaging?
+
+Transactional messaging is time-sensitive, event-driven communication that provides information users need to act on:
+
+- **Security alerts**: Login attempts, password changes, suspicious activity
+- **Account notifications**: Profile updates, subscription changes, account status
+- **Transaction confirmations**: Payment confirmations, order updates, booking confirmations
+- **System alerts**: Service outages, maintenance notices, important updates
+
+<Info>
+  **Transactional Only**: Clancy SMS is transactional-only. Marketing messages, promotional content, and bulk broadcasts are not allowed and will be blocked.
+</Info>
+
+## Sending Transactional Messages
+
+Use the generic send message endpoint for transactional alerts (not OTP-specific):
+
+<Tabs>
+  <Tab title="SDK">
+    ```typescript
+    import { SMS } from '@clancydev/sms';
+    
+    const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+    
+    // Send transactional alert (using generic send endpoint)
+    async function sendSecurityAlert(phoneNumber: string, alertType: string, details: string) {
+      const message = await sms.messages.send({
+        to: phoneNumber,
+        body: `Security Alert: ${alertType}. ${details}. Reply STOP to opt out.`,
+        requestId: `alert_${alertType}_${Date.now()}`,
+      });
+      
+      return message;
+    }
+    ```
+  </Tab>
+  <Tab title="HTTP API">
+    ```bash
+    curl -X POST https://api.clancy.com/api/v1/messages \
+      -H "Authorization: Bearer $CLANCY_SMS_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "to": "+15551234567",
+        "body": "Security Alert: New login from New York. Reply STOP to opt out.",
+        "idempotency_key": "alert_login_1642248000"
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+  For OTP codes, use `sms.otp.send()` which automatically formats the message. For other transactional messages, use the generic send endpoint with a custom message body.
+</Info>
+
+## Security Alerts
+
+Security alerts notify users of account activity and security events:
+
+### Login Attempts
+
+Alert users when login attempts occur:
+
+```typescript
+async function sendLoginAlert(phoneNumber: string, location: string, device: string) {
+  const message = await sms.messages.send({
+    to: phoneNumber,
+    body: `New login detected from ${location} on ${device}. If this wasn't you, secure your account immediately. Reply STOP to opt out.`,
+    requestId: `login_alert_${Date.now()}`,
+  });
+  
+  return message;
+}
+
+// Usage
+await sendLoginAlert(
+  '+15551234567',
+  'New York, NY',
+  'Chrome on Windows'
+);
+```
+
+### Password Changes
+
+Alert users when passwords are changed:
+
+```typescript
+async function sendPasswordChangeAlert(phoneNumber: string) {
+  const message = await sms.messages.send({
+    to: phoneNumber,
+    body: 'Your password was changed. If you did not make this change, secure your account immediately. Reply STOP to opt out.',
+    requestId: `password_change_${Date.now()}`,
+  });
+  
+  return message;
+}
+```
+
+### Suspicious Activity
+
+Alert users of suspicious account activity:
+
+```typescript
+async function sendSuspiciousActivityAlert(
+  phoneNumber: string,
+  activity: string,
+  action: string
+) {
+  const message = await sms.messages.send({
+    to: phoneNumber,
+    body: `Suspicious activity detected: ${activity}. ${action} Reply STOP to opt out.`,
+    requestId: `suspicious_${Date.now()}`,
+  });
+  
+  return message;
+}
+
+// Usage
+await sendSuspiciousActivityAlert(
+  '+15551234567',
+  'Multiple failed login attempts',
+  'We have temporarily locked your account. Reset your password to unlock.'
+);
+```
+
+## Account Notifications
+
+Account notifications inform users of account changes:
+
+### Profile Updates
+
+```typescript
+async function sendProfileUpdateAlert(phoneNumber: string, field: string) {
+  const message = await sms.messages.send({
+    to: phoneNumber,
+    body: `Your ${field} has been updated. If you did not make this change, contact support. Reply STOP to opt out.`,
+    requestId: `profile_update_${field}_${Date.now()}`,
+  });
+  
+  return message;
+}
+```
+
+### Subscription Changes
+
+```typescript
+async function sendSubscriptionAlert(phoneNumber: string, action: string, plan: string) {
+  const message = await sms.messages.send({
+    to: phoneNumber,
+    body: `Your subscription has been ${action} to ${plan}. Reply STOP to opt out.`,
+    requestId: `subscription_${action}_${Date.now()}`,
+  });
+  
+  return message;
+}
+```
+
+## Transaction Confirmations
+
+Transaction confirmations provide receipts and updates:
+
+### Payment Confirmations
+
+```typescript
+async function sendPaymentConfirmation(
+  phoneNumber: string,
+  amount: string,
+  transactionId: string
+) {
+  const message = await sms.messages.send({
+    to: phoneNumber,
+    body: `Payment of $${amount} confirmed. Transaction ID: ${transactionId}. Reply STOP to opt out.`,
+    requestId: `payment_${transactionId}`,
+  });
+  
+  return message;
+}
+```
+
+### Order Updates
+
+```typescript
+async function sendOrderUpdate(phoneNumber: string, orderId: string, status: string) {
+  const message = await sms.messages.send({
+    to: phoneNumber,
+    body: `Order ${orderId} status: ${status}. Reply STOP to opt out.`,
+    requestId: `order_${orderId}_${status}`,
+  });
+  
+  return message;
+}
+```
+
+## Message Format Best Practices
+
+### Keep Messages Concise
+
+SMS messages have a 160-character limit per segment. Keep messages concise:
+
+```typescript
+// ✅ Good: Concise and clear
+const message = `New login from New York. If not you, secure account. Reply STOP to opt out.`;
+
+// ❌ Bad: Too long and verbose
+const message = `We have detected a new login attempt on your account from a device located in New York, New York. If this login attempt was not authorized by you, please take immediate action to secure your account by changing your password. If you would like to opt out of these security alerts, please reply with the word STOP.`;
+```
+
+### Include Action Information
+
+Provide clear action information:
+
+```typescript
+// ✅ Good: Clear action
+const message = `Suspicious activity detected. Account temporarily locked. Reset password to unlock. Reply STOP to opt out.`;
+
+// ❌ Bad: Vague action
+const message = `Suspicious activity detected. Reply STOP to opt out.`;
+```
+
+### Include Opt-Out Instructions
+
+Always include opt-out instructions:
+
+```typescript
+// ✅ Good: Clear opt-out
+const message = `Alert: ${details}. Reply STOP to opt out.`;
+
+// ❌ Bad: No opt-out
+const message = `Alert: ${details}.`;
+```
+
+<Info>
+  **Opt-Out Required**: Include opt-out instructions in all transactional messages to comply with TCPA regulations. Clancy SMS automatically handles STOP/START requests.
+</Info>
+
+## Content Policy
+
+Transactional messages must comply with content policy:
+
+**Allowed**:
+
+- Security alerts and notifications
+- Account status updates
+- Transaction confirmations
+- System alerts and maintenance notices
+- Time-sensitive operational information
+
+**Not Allowed**:
+
+- Marketing language ("limited time", "act now", "click here")
+- Promotional content ("20% off", "special offer", "exclusive deal")
+- URL shorteners (bit.ly, tinyurl.com, t.co)
+- Bulk broadcasts to large lists
+- Campaign-style messaging
+
+<Info>
+  Content policy violations result in message blocking with a `POLICY_BLOCKED_NON_OTP` error. Review your message content before sending to ensure compliance.
+</Info>
+
+## Error Handling
+
+Handle errors for transactional alerts:
+
+```typescript
+import { PolicyBlockedError, ValidationError } from '@clancydev/sms';
+
+async function sendAlertWithErrorHandling(
+  phoneNumber: string,
+  body: string,
+  requestId: string
+) {
+  try {
+    const message = await sms.messages.send({
+      to: phoneNumber,
+      body: body,
+      requestId: requestId,
+    });
+    
+    return { success: true, message };
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      // Invalid request format
+      console.error('Invalid alert request:', error.message);
+      return { success: false, error: 'INVALID_REQUEST' };
+    } else if (error instanceof PolicyBlockedError) {
+      if (error.code === 'POLICY_BLOCKED_NON_OTP') {
+        // Content blocked - review message content
+        console.error('Content blocked:', error.message);
+        return { success: false, error: 'CONTENT_BLOCKED' };
+      } else if (error.code === 'RECIPIENT_SUPPRESSED') {
+        // Recipient opted out - respect opt-out
+        console.error('Recipient suppressed:', error.message);
+        return { success: false, error: 'RECIPIENT_SUPPRESSED' };
+      }
+    }
+    
+    return { success: false, error: 'UNKNOWN_ERROR' };
+  }
+}
+```
+
+## Best Practices
+
+- **Keep messages concise**: Stay within 160 characters per segment
+- **Include clear actions**: Tell users what to do
+- **Include opt-out instructions**: Always include "Reply STOP to opt out"
+- **Comply with content policy**: Avoid marketing language and URL shorteners
+- **Use idempotency keys**: Prevent duplicate alerts on retries
+- **Handle errors gracefully**: Log and handle errors appropriately
+- **Monitor delivery status**: Track delivery rates for important alerts
+- **Respect suppression list**: Don't send to opted-out recipients
+
+## Next Steps
+
+- [OTP Delivery Guide](/docs/guides/otp-delivery) — Send OTP codes
+- [Error Handling Guide](/docs/guides/handling-errors) — Handle errors gracefully
+- [Compliance and Suppression](/docs/policies/compliance-and-suppression) — Learn about STOP/START handling

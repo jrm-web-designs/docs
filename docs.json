@@ -18,6 +18,7 @@
             "light": "#82e8f6",
             "dark": "#82e8f6"
           },
+          "hidden": true,
           "href": "https://clancy-sms.com/dashboard"
         }
       ]
@@ -34,6 +35,19 @@
               "guides/getting-started/untitled-page",
               "guides/getting-started/untitled-page-1",
               "guides/getting-started/untitled-page-2"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/guides/untitled-page-3",
+              "guides/guides/untitled-page-7",
+              "guides/guides/untitled-page-2",
+              "guides/guides/untitled-page",
+              "guides/guides/untitled-page-1",
+              "guides/guides/untitled-page-5",
+              "guides/guides/untitled-page-6",
+              "guides/guides/untitled-page-4"
             ]
           },
           {

@@ -1,0 +1,440 @@
+---
+title: 'OTP Delivery'
+description: 'Best practices for implementing OTP (one-time password) delivery with Clancy SMS'
+---
+
+Learn how to implement secure, reliable OTP delivery for authentication flows. This guide covers generating codes, sending them via Clancy SMS, and handling delivery status.
+
+<Info>
+**Prerequisites**: You'll need a Clancy SMS workspace, API key, and basic understanding of authentication flows. If you haven't set up the SDK yet, see the [Installation guide](/docs/getting-started/installation).
+</Info>
+
+## What you'll learn
+
+In this guide, you'll learn:
+
+- How to generate secure OTP codes
+- How to send OTP codes using the Clancy SMS SDK
+- How to handle OTP delivery and failures
+- How to implement idempotency for reliable sends
+- How to track OTP delivery status
+- Common pitfalls and best practices
+
+## OTP Code Generation
+
+Generate secure OTP codes using a cryptographically secure random number generator. The recommended approach depends on your use case:
+
+**6-digit numeric codes** (most common for SMS):
+- Use for login, two-factor authentication, password reset
+- Easy to type on mobile devices
+- Less secure than longer alphanumeric codes
+
+**Alphanumeric codes** (more secure):
+- Use for high-security scenarios
+- Harder to type but more secure
+- Can be shorter (4-6 characters)
+
+<AccordionGroup>
+  <Accordion title="Node.js code generation">
+
+```typescript
+import crypto from 'crypto';
+
+// 6-digit numeric code
+function generateNumericOTP(length: number = 6): string {
+  const min = Math.pow(10, length - 1);
+  const max = Math.pow(10, length) - 1;
+  return String(Math.floor(Math.random() * (max - min + 1)) + min);
+}
+
+// Alphanumeric code (more secure)
+function generateAlphanumericOTP(length: number = 6): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Exclude confusing chars
+  const bytes = crypto.randomBytes(length);
+  let code = '';
+  for (let i = 0; i < length; i++) {
+    code += chars[bytes[i] % chars.length];
+  }
+  return code;
+}
+
+// Cryptographically secure numeric code
+function generateSecureNumericOTP(length: number = 6): string {
+  const min = Math.pow(10, length - 1);
+  const max = Math.pow(10, length) - 1;
+  const range = max - min + 1;
+  const bytesNeeded = Math.ceil(Math.log2(range) / 8);
+  const maxValid = Math.floor(256 ** bytesNeeded / range) * range - 1;
+  
+  let randomValue: number;
+  do {
+    const randomBytes = crypto.randomBytes(bytesNeeded);
+    randomValue = 0;
+    for (let i = 0; i < bytesNeeded; i++) {
+      randomValue = randomValue * 256 + randomBytes[i];
+    }
+  } while (randomValue > maxValid);
+  
+  return String((randomValue % range) + min);
+}
+```
+
+  </Accordion>
+  <Accordion title="Python code generation">
+
+```python
+import secrets
+import string
+
+# 6-digit numeric code
+def generate_numeric_otp(length: int = 6) -> str:
+    min_value = 10 ** (length - 1)
+    max_value = 10 ** length - 1
+    return str(secrets.randbelow(max_value - min_value + 1) + min_value)
+
+# Alphanumeric code (more secure)
+def generate_alphanumeric_otp(length: int = 6) -> str:
+    chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'  # Exclude confusing chars
+    return ''.join(secrets.choice(chars) for _ in range(length))
+```
+
+  </Accordion>
+</AccordionGroup>
+
+<Callout>
+**Security**: Always use cryptographically secure random number generators (e.g., `crypto.randomBytes` in Node.js, `secrets` in Python) rather than `Math.random()` or `random.random()`. Weak randomness makes OTP codes predictable.
+</Callout>
+
+## Request Flow
+
+When implementing OTP delivery, follow this flow:
+
+1. **User initiates action** (login, password reset, etc.)
+2. **Generate OTP code** using secure random number generator
+3. **Store code** with expiration (typically 5-15 minutes) and associate with user/session
+4. **Send OTP via Clancy SMS** with idempotency key
+5. **Handle API response** (success or failure)
+6. **User enters code** in your application
+7. **Verify code** against stored value and expiration
+8. **Track delivery status** (optional, via webhooks or polling)
+
+<Info>
+The OTP code should be generated on your application server, not in client-side code. Never trust client-generated codes for security-critical operations.
+</Info>
+
+## Sending OTP Codes
+
+Use the Clancy SMS SDK to send OTP codes. The SDK automatically formats the message as "Your verification code is: [code]".
+
+### Basic Example
+
+```typescript
+import { SMS } from '@clancydev/sms';
+import crypto from 'crypto';
+
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+
+async function sendOTP(phoneNumber: string, userId: string) {
+  // Generate 6-digit code
+  const code = generateSecureNumericOTP(6);
+  
+  // Generate idempotency key (unique per user + action)
+  const requestId = `otp_${userId}_${Date.now()}`;
+  
+  try {
+    const message = await sms.otp.send({
+      to: phoneNumber,
+      code: code,
+      requestId: requestId,
+    });
+    
+    // Store code in database with expiration
+    await storeOTPCode(userId, code, message.id, new Date(Date.now() + 10 * 60 * 1000)); // 10 min
+    
+    return { success: true, messageId: message.id };
+  } catch (error) {
+    console.error('Failed to send OTP:', error);
+    return { success: false, error };
+  }
+}
+```
+
+### With User Session Tracking
+
+For login flows, associate the OTP with a session identifier:
+
+```typescript
+async function sendLoginOTP(phoneNumber: string, sessionId: string) {
+  const code = generateSecureNumericOTP(6);
+  const requestId = `login_${sessionId}_${Date.now()}`;
+  
+  const message = await sms.otp.send({
+    to: phoneNumber,
+    code: code,
+    requestId: requestId,
+  });
+  
+  // Store code associated with session
+  await db.otpCodes.create({
+    session_id: sessionId,
+    phone_number: phoneNumber,
+    code: code,
+    message_id: message.id,
+    expires_at: new Date(Date.now() + 10 * 60 * 1000),
+  });
+  
+  return message;
+}
+```
+
+## Idempotency Keys
+
+Idempotency keys ensure that retrying the same request doesn't create duplicate messages. Use unique, deterministic keys for each OTP send operation.
+
+**Good idempotency key patterns**:
+
+- User ID + action + timestamp window: `otp_user123_login_${Date.now()}`
+- Session ID + action: `login_session_abc123`
+- Request identifier: `password_reset_${requestToken}`
+
+**Avoid**:
+
+- Random UUIDs for retries (defeats purpose of idempotency)
+- Timestamps only (collisions possible)
+- User ID only (multiple sends to same user conflict)
+
+```typescript
+// ✅ Good: Deterministic and unique per intent
+const requestId = `otp_${userId}_login_${Math.floor(Date.now() / 60000)}`; // Minute window
+
+// ❌ Bad: Random UUID defeats idempotency
+const requestId = crypto.randomUUID();
+
+// ❌ Bad: Only timestamp (collisions possible)
+const requestId = `${Date.now()}`;
+```
+
+<Info>
+Idempotency keys are scoped to your workspace. The same key used by different workspaces will create separate messages. Use consistent key formats within your application.
+</Info>
+
+## Handling Delivery Status
+
+OTP delivery is asynchronous. After a successful API response, the message is queued and will be sent shortly. Track delivery status using webhooks or polling.
+
+### Polling for Status
+
+For immediate feedback, poll the message status:
+
+```typescript
+async function sendOTPWithPolling(phoneNumber: string, code: string) {
+  const message = await sms.otp.send({
+    to: phoneNumber,
+    code: code,
+    requestId: `otp_${Date.now()}`,
+  });
+  
+  // Poll for delivery status (optional, for immediate feedback)
+  const maxAttempts = 10;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+    
+    const updated = await sms.messages.get(message.id);
+    if (updated.status === 'delivered' || updated.status === 'failed') {
+      return updated;
+    }
+  }
+  
+  return message; // Still pending/queued
+}
+```
+
+### Using Webhooks
+
+For production applications, use webhooks to receive delivery status updates:
+
+```typescript
+// Webhook endpoint (Next.js API route example)
+export async function POST(request: Request) {
+  const payload = await request.json();
+  
+  // Verify webhook signature (important for security)
+  const signature = request.headers.get('X-Clancy-Signature');
+  if (!verifyWebhookSignature(payload, signature)) {
+    return new Response('Invalid signature', { status: 403 });
+  }
+  
+  // Handle delivery event
+  if (payload.type === 'message.delivered') {
+    await db.otpCodes.update({
+      where: { message_id: payload.message.id },
+      data: { delivered_at: new Date() },
+    });
+  } else if (payload.type === 'message.failed') {
+    // Handle failed delivery (e.g., notify user, log error)
+    await handleFailedOTP(payload.message.id, payload.message.failure_reason);
+  }
+  
+  return new Response('OK', { status: 200 });
+}
+```
+
+<Info>
+Webhooks are recommended for production. They provide real-time delivery status updates without polling, reducing API calls and improving efficiency.
+</Info>
+
+## Error Handling
+
+Handle errors gracefully to provide a good user experience:
+
+```typescript
+import {
+  SMS,
+  ValidationError,
+  PolicyBlockedError,
+  AuthenticationError,
+} from '@clancydev/sms';
+
+async function sendOTPWithErrorHandling(phoneNumber: string, code: string) {
+  try {
+    const message = await sms.otp.send({
+      to: phoneNumber,
+      code: code,
+      requestId: `otp_${Date.now()}`,
+    });
+    return { success: true, message };
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      // Invalid phone number or request format
+      return { 
+        success: false, 
+        error: 'INVALID_REQUEST',
+        message: 'Please check your phone number and try again.',
+      };
+    } else if (error instanceof PolicyBlockedError) {
+      if (error.code === 'RATE_LIMIT_EXCEEDED') {
+        // Rate limited - ask user to wait
+        return { 
+          success: false, 
+          error: 'RATE_LIMITED',
+          message: 'Too many requests. Please wait a minute and try again.',
+        };
+      } else if (error.code === 'RECIPIENT_SUPPRESSED') {
+        // Recipient has opted out - cannot send
+        return { 
+          success: false, 
+          error: 'RECIPIENT_SUPPRESSED',
+          message: 'This number has opted out of SMS messages.',
+        };
+      }
+    } else if (error instanceof AuthenticationError) {
+      // API key issue - log and alert
+      console.error('API key authentication failed');
+      return { 
+        success: false, 
+        error: 'AUTH_ERROR',
+        message: 'Service temporarily unavailable. Please try again later.',
+      };
+    }
+    
+    // Generic error
+    return { 
+      success: false, 
+      error: 'UNKNOWN_ERROR',
+      message: 'Failed to send OTP. Please try again.',
+    };
+  }
+}
+```
+
+## Common Mistakes
+
+<AccordionGroup>
+  <Accordion title="Not storing codes before sending">
+
+**Problem**: Sending OTP before storing it in database can lead to codes that can't be verified.
+
+**Solution**: Always store the code (with expiration) before sending the SMS, or use a database transaction to ensure atomicity.
+
+```typescript
+// ❌ Bad: Send before storing
+const message = await sms.otp.send({ to: phoneNumber, code: code, requestId });
+await db.otpCodes.create({ code, expires_at });
+
+// ✅ Good: Store first, then send
+await db.otpCodes.create({ code, expires_at });
+const message = await sms.otp.send({ to: phoneNumber, code: code, requestId });
+```
+
+  </Accordion>
+  <Accordion title="Reusing the same idempotency key">
+
+**Problem**: Using the same idempotency key for multiple OTP sends means retries will return the original code, which may have expired.
+
+**Solution**: Include a timestamp window or action identifier in the idempotency key to allow new codes after expiration.
+
+```typescript
+// ❌ Bad: Same key reused
+const requestId = `otp_${userId}`; // Always same for user
+
+// ✅ Good: Unique per attempt
+const requestId = `otp_${userId}_${Math.floor(Date.now() / 600000)}`; // New every 10 min
+```
+
+  </Accordion>
+  <Accordion title="Not handling delivery failures">
+
+**Problem**: Assuming OTP delivery is always successful leads to users waiting for codes that never arrive.
+
+**Solution**: Check delivery status and provide alternative methods (e.g., resend option, email fallback).
+
+```typescript
+// ✅ Good: Check status and handle failures
+const message = await sms.otp.send({ to: phoneNumber, code: code, requestId });
+
+// After some time, check if delivered
+setTimeout(async () => {
+  const updated = await sms.messages.get(message.id);
+  if (updated.status === 'failed') {
+    // Notify user, offer resend or alternative
+    await notifyUserOTPFailed(phoneNumber);
+  }
+}, 30000); // Check after 30 seconds
+```
+
+  </Accordion>
+  <Accordion title="Short code expiration times">
+
+**Problem**: Codes that expire too quickly (e.g., 2 minutes) may expire before delivery, especially with slow carriers or network issues.
+
+**Solution**: Use reasonable expiration times (5-15 minutes) and allow resend after expiration.
+
+```typescript
+// ❌ Bad: Too short
+const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
+
+// ✅ Good: Reasonable expiration
+const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+```
+
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+- **Generate codes server-side**: Never trust client-generated codes
+- **Use secure randomness**: Use cryptographically secure random number generators
+- **Set reasonable expiration**: 5-15 minutes is typical
+- **Implement rate limiting**: Limit OTP requests per phone number to prevent abuse
+- **Track delivery status**: Monitor delivery rates and handle failures
+- **Provide resend option**: Allow users to request new codes if delivery fails
+- **Log security events**: Log OTP generation, sending, and verification attempts
+- **Use idempotency keys**: Prevent duplicate sends on retries
+- **Handle edge cases**: Invalid numbers, rate limits, suppressed recipients
+
+## Next Steps
+
+- [Idempotency Guide](/docs/guides/idempotency) — Deep dive into idempotency patterns
+- [Delivery Status Guide](/docs/guides/delivery-status) — Track message delivery
+- [Error Handling Guide](/docs/guides/handling-errors) — Handle errors gracefully
+- [API Reference: Send Message](/docs/api-reference/send-message) — Complete API documentation

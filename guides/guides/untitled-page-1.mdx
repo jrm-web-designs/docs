@@ -1,0 +1,484 @@
+---
+title: 'Handling Errors'
+description: 'Handle API errors gracefully with proper error types and retry strategies'
+---
+
+Learn how to handle errors from the Clancy SMS API. This guide covers error types, error codes, retry strategies, and best practices for error handling.
+
+<Info>
+**Prerequisites**: Basic understanding of HTTP status codes and error handling patterns. Familiarity with the Clancy SMS SDK is helpful.
+</Info>
+
+## What you'll learn
+
+In this guide, you'll learn:
+
+- Error types and when they occur
+- How to handle specific error codes
+- Retry strategies for transient errors
+- Best practices for error handling
+- Common error scenarios and solutions
+
+## Error Types
+
+Clancy SMS uses typed errors that you can catch and handle specifically:
+
+- `AuthenticationError`: Invalid or missing API key
+- `ValidationError`: Invalid request format or parameters
+- `PolicyBlockedError`: Request blocked by policy (rate limits, suppression, content)
+- `NotFoundError`: Resource not found (message, workspace)
+- `ServerError`: Internal server error or provider issues
+- `BillingError`: Billing account inactive (if billing is configured)
+
+<Info>
+All errors extend `ClancyError` base class. Check error types using `instanceof` checks or error codes for specific handling.
+</Info>
+
+## Error Handling Basics
+
+### Basic Error Handling
+
+Handle errors using try-catch blocks:
+
+```typescript
+import {
+  SMS,
+  ClancyError,
+  AuthenticationError,
+  ValidationError,
+  PolicyBlockedError,
+  NotFoundError,
+  ServerError,
+} from '@clancydev/sms';
+
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+
+try {
+  const message = await sms.otp.send({
+    to: '+15551234567',
+    code: '123456',
+    requestId: 'test_123',
+  });
+  
+  console.log('Message sent:', message.id);
+} catch (error) {
+  if (error instanceof AuthenticationError) {
+    // Handle authentication errors
+    console.error('Invalid API key');
+  } else if (error instanceof ValidationError) {
+    // Handle validation errors
+    console.error('Invalid request:', error.message);
+  } else if (error instanceof PolicyBlockedError) {
+    // Handle policy violations
+    console.error('Sending blocked:', error.message);
+  } else if (error instanceof NotFoundError) {
+    // Handle not found errors
+    console.error('Resource not found');
+  } else if (error instanceof ServerError) {
+    // Handle server errors
+    console.error('Server error:', error.message);
+  } else {
+    // Handle unexpected errors
+    console.error('Unexpected error:', error);
+  }
+}
+```
+
+### Error Object Structure
+
+Error objects include helpful metadata:
+
+```typescript
+{
+  name: 'PolicyBlockedError',
+  code: 'RATE_LIMIT_EXCEEDED',
+  message: 'Rate limit exceeded: 51/50 messages per minute',
+  statusCode: 403,
+  hint: 'Please wait before sending more messages. Check your rate limits in the dashboard.',
+  metadata: {
+    violation_type: 'rate_limit',
+  },
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Error code reference">
+
+**Authentication Errors**:
+
+- `AUTHENTICATION_FAILED`: Invalid or missing API key
+
+**Validation Errors**:
+
+- `VALIDATION_ERROR`: Invalid request format or parameters
+
+**Policy Blocked Errors**:
+
+- `RATE_LIMIT_EXCEEDED`: Rate limit exceeded
+- `RECIPIENT_SUPPRESSED`: Recipient has opted out
+- `POLICY_BLOCKED_NON_OTP`: Content violates policy
+- `WORKSPACE_PAUSED`: Workspace sending is paused
+- `GLOBAL_PAUSE_ACTIVE`: Global pause is active
+- `RECIPIENT_BURST_LIMIT`: Recipient burst limit exceeded
+
+**Not Found Errors**:
+
+- `NOT_FOUND`: Resource not found
+
+**Server Errors**:
+
+- `SERVER_ERROR`: Internal server error
+
+**Billing Errors**:
+
+- `BILLING_INACTIVE`: Billing account inactive
+
+</Accordion>
+</AccordionGroup>
+
+## Handling Specific Errors
+
+### Authentication Errors
+
+**When it occurs**: Invalid or missing API key, revoked key, or key belongs to different workspace.
+
+**What to do**: Check API key configuration, verify key is correct, regenerate if needed.
+
+```typescript
+if (error instanceof AuthenticationError) {
+  // Check if API key is configured
+  if (!process.env.CLANCY_SMS_API_KEY) {
+    console.error('API key not configured. Set CLANCY_SMS_API_KEY environment variable.');
+  } else {
+    console.error('API key authentication failed. Verify key in dashboard.');
+    // Optionally: Alert admin, log for investigation
+    await alertAdmin('API key authentication failed', { error: error.message });
+  }
+  
+  // Don't retry - authentication errors won't succeed on retry
+}
+```
+
+<Callout>
+**No Retry**: Don't retry authentication errors. They won't succeed on retry unless the API key is fixed first.
+</Callout>
+
+### Validation Errors
+
+**When it occurs**: Invalid request format, missing required fields, invalid phone number format, idempotency key too long.
+
+**What to do**: Fix the request and retry.
+
+```typescript
+if (error instanceof ValidationError) {
+  // Check error details
+  if (error.metadata?.details) {
+    // Validation errors include field-specific details
+    console.error('Validation errors:', error.metadata.details);
+  }
+  
+  // Common validation errors:
+  // - Phone number must be in E.164 format (+15551234567)
+  // - Missing required field (to, code, requestId)
+  // - Idempotency key too long (max 255 characters)
+  
+  // Fix the request and retry (if user input was wrong)
+  // Don't retry immediately if it's a code bug - fix the code
+}
+```
+
+### Policy Blocked Errors
+
+**When it occurs**: Rate limits exceeded, recipient suppressed, content blocked, workspace paused.
+
+**What to do**: Check error code and handle appropriately.
+
+```typescript
+if (error instanceof PolicyBlockedError) {
+  switch (error.code) {
+    case 'RATE_LIMIT_EXCEEDED':
+      // Rate limited - wait before retrying
+      console.error('Rate limit exceeded:', error.hint);
+      // Use exponential backoff for retry
+      await retryWithBackoff(() => sendOTP(...));
+      break;
+      
+    case 'RECIPIENT_SUPPRESSED':
+      // Recipient opted out - don't retry
+      console.error('Recipient has opted out:', error.hint);
+      // Remove from lists, respect opt-out
+      await removeFromLists(phoneNumber);
+      break;
+      
+    case 'POLICY_BLOCKED_NON_OTP':
+      // Content blocked - don't retry with same content
+      console.error('Content blocked:', error.hint);
+      // Review content policy, fix message
+      break;
+      
+    case 'WORKSPACE_PAUSED':
+      // Workspace paused - contact support
+      console.error('Workspace paused:', error.hint);
+      // Don't retry - requires admin action
+      await alertAdmin('Workspace paused', { error: error.message });
+      break;
+      
+    case 'RECIPIENT_BURST_LIMIT':
+      // Too many messages to same recipient - wait
+      console.error('Recipient burst limit:', error.hint);
+      // Wait before retrying to this recipient
+      await delay(5 * 60 * 1000); // Wait 5 minutes
+      break;
+  }
+}
+```
+
+### Server Errors
+
+**When it occurs**: Internal server errors, provider issues, temporary unavailability.
+
+**What to do**: Retry with exponential backoff.
+
+```typescript
+if (error instanceof ServerError) {
+  // Server errors are often transient - retry with backoff
+  console.error('Server error:', error.message);
+  
+  // Implement exponential backoff
+  await retryWithExponentialBackoff(
+    () => sms.otp.send(...),
+    { maxRetries: 3, baseDelay: 1000 }
+  );
+}
+```
+
+### Not Found Errors
+
+**When it occurs**: Message not found, workspace not found (rare).
+
+**What to do**: Verify resource ID, handle gracefully.
+
+```typescript
+if (error instanceof NotFoundError) {
+  // Message or resource not found
+  console.error('Resource not found:', error.message);
+  
+  // Check if message ID is correct
+  // Handle gracefully - don't retry (won't succeed)
+}
+```
+
+## Retry Strategies
+
+### When to Retry
+
+Retry on **transient errors** (errors that may succeed on retry):
+- Network errors (timeouts, connection errors)
+- Server errors (5xx status codes)
+- Rate limit errors (after waiting)
+- Temporary provider issues
+
+Don't retry on **permanent errors** (errors that won't succeed on retry):
+- Authentication errors (invalid API key)
+- Validation errors (invalid request format)
+- Policy blocked errors (recipient suppressed, content blocked)
+- Not found errors (resource doesn't exist)
+
+### Exponential Backoff
+
+Implement exponential backoff for retries:
+
+```typescript
+async function retryWithExponentialBackoff<T>(
+  fn: () => Promise<T>,
+  options: {
+    maxRetries?: number;
+    baseDelay?: number;
+    maxDelay?: number;
+  } = {}
+): Promise<T> {
+  const { maxRetries = 3, baseDelay = 1000, maxDelay = 60000 } = options;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      // Don't retry on permanent errors
+      if (error instanceof AuthenticationError ||
+          error instanceof ValidationError ||
+          error instanceof NotFoundError ||
+          (error instanceof PolicyBlockedError && 
+           error.code !== 'RATE_LIMIT_EXCEEDED')) {
+        throw error;
+      }
+      
+      // Check if last attempt
+      if (attempt === maxRetries - 1) {
+        throw error;
+      }
+      
+      // Calculate delay (exponential backoff with jitter)
+      const delay = Math.min(
+        baseDelay * Math.pow(2, attempt) + Math.random() * 1000,
+        maxDelay
+      );
+      
+      console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw new Error('Max retries exceeded');
+}
+
+// Usage
+try {
+  const message = await retryWithExponentialBackoff(
+    () => sms.otp.send({
+      to: phoneNumber,
+      code: code,
+      requestId: requestId,
+    }),
+    { maxRetries: 3, baseDelay: 1000 }
+  );
+} catch (error) {
+  // Handle final failure
+  console.error('Failed after retries:', error);
+}
+```
+
+### Retry for Rate Limits
+
+For rate limit errors, wait before retrying:
+
+```typescript
+async function sendWithRateLimitRetry(request: OTPRequest) {
+  const maxRetries = 3;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await sms.otp.send(request);
+    } catch (error) {
+      if (error instanceof PolicyBlockedError && 
+          error.code === 'RATE_LIMIT_EXCEEDED') {
+        if (attempt < maxRetries - 1) {
+          // Wait 60 seconds before retry (rate limits typically reset per minute)
+          console.log('Rate limited. Waiting 60 seconds...');
+          await new Promise(resolve => setTimeout(resolve, 60000));
+          continue;
+        }
+      }
+      
+      throw error;
+    }
+  }
+  
+  throw new Error('Max retries exceeded');
+}
+```
+
+## Error Logging
+
+Log errors with context for debugging:
+
+```typescript
+import { createLogger } from './logger';
+
+const logger = createLogger();
+
+try {
+  const message = await sms.otp.send({
+    to: phoneNumber,
+    code: code,
+    requestId: requestId,
+  });
+} catch (error) {
+  // Log with context
+  logger.error('Failed to send OTP', {
+    error: error instanceof ClancyError ? {
+      code: error.code,
+      message: error.message,
+      statusCode: error.statusCode,
+      hint: error.hint,
+    } : error,
+    phone_number: phoneNumber, // Only last 4 digits in production
+    request_id: requestId,
+    user_id: userId, // If applicable
+  });
+  
+  // Handle error based on type
+  // ...
+}
+```
+
+<Callout>
+**Sensitive Data**: Never log full phone numbers, API keys, or OTP codes. Log only the last 4 digits or sanitize data before logging.
+</Callout>
+
+## User-Friendly Error Messages
+
+Transform technical errors into user-friendly messages:
+
+```typescript
+function getUserFriendlyErrorMessage(error: ClancyError): string {
+  if (error instanceof AuthenticationError) {
+    return 'Service temporarily unavailable. Please try again later.';
+  }
+  
+  if (error instanceof ValidationError) {
+    return 'Please check your phone number and try again.';
+  }
+  
+  if (error instanceof PolicyBlockedError) {
+    switch (error.code) {
+      case 'RATE_LIMIT_EXCEEDED':
+        return 'Too many requests. Please wait a minute and try again.';
+      case 'RECIPIENT_SUPPRESSED':
+        return 'This number has opted out of SMS messages.';
+      case 'POLICY_BLOCKED_NON_OTP':
+        return 'Message content is not allowed. Please contact support.';
+      case 'WORKSPACE_PAUSED':
+        return 'Service is temporarily unavailable. Please try again later.';
+      case 'RECIPIENT_BURST_LIMIT':
+        return 'Too many messages sent to this number recently. Please wait before trying again.';
+      default:
+        return 'Unable to send message. Please try again later.';
+    }
+  }
+  
+  if (error instanceof ServerError) {
+    return 'Service temporarily unavailable. Please try again later.';
+  }
+  
+  return 'An error occurred. Please try again later.';
+}
+
+// Usage
+try {
+  await sms.otp.send(...);
+} catch (error) {
+  const userMessage = getUserFriendlyErrorMessage(error);
+  // Show to user
+  showErrorToUser(userMessage);
+  
+  // Log technical details internally
+  logger.error('OTP send failed', { error, technical: true });
+}
+```
+
+## Best Practices
+
+- **Use typed errors**: Catch specific error types using `instanceof` checks
+- **Check error codes**: Use error codes for specific handling logic
+- **Retry selectively**: Only retry transient errors, not permanent errors
+- **Implement backoff**: Use exponential backoff with jitter for retries
+- **Log errors**: Log errors with context for debugging (but sanitize sensitive data)
+- **Provide user messages**: Transform technical errors into user-friendly messages
+- **Handle all cases**: Handle all error types, even if just logging
+- **Monitor errors**: Track error rates and types for monitoring
+
+## Next Steps
+
+- [OTP Delivery Guide](/docs/guides/otp-delivery) — Implement OTP sending with error handling
+- [Rate Limits Guide](/docs/guides/rate-limits) — Understand rate limits and handling
+- [API Reference: Errors](/docs/api-reference/errors) — Complete error reference

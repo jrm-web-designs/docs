@@ -1,0 +1,458 @@
+---
+title: "Delivery Status"
+description: "Track message delivery status using webhooks, polling, and status queries"
+---
+
+Learn how to track message delivery status in Clancy SMS. This guide covers status types, status transitions, webhooks, polling, and handling delivery events.
+
+<Info>
+  **Prerequisites**: Basic understanding of webhooks and HTTP callbacks. Familiarity with message sending is helpful.
+</Info>
+
+## What you'll learn
+
+In this guide, you'll learn:
+
+- Message status types and lifecycle
+- How status transitions work
+- How to use webhooks for real-time status updates
+- How to poll for status updates
+- How to handle delivery events
+- Best practices for tracking delivery
+
+## Message Status Lifecycle
+
+Messages progress through a status lifecycle as they're processed and delivered:
+
+```
+pending → queued → sent → delivered
+                  ↓
+                failed / blocked
+```
+
+### Status Types
+
+| Status      | Description                                                                      |
+| ----------- | -------------------------------------------------------------------------------- |
+| `pending`   | Message was created and is waiting to be processed by a worker                   |
+| `queued`    | Message is queued at the SMS provider and will be sent shortly                   |
+| `sent`      | Message was successfully sent to the provider. Awaiting delivery confirmation    |
+| `delivered` | Message was successfully delivered to the recipient's device                     |
+| `failed`    | Message delivery failed (e.g., invalid number, carrier rejection, network error) |
+| `blocked`   | Message was blocked by policy (e.g., suppressed recipient, content violation)    |
+
+<Info>
+  Messages are created in `pending` state when the API accepts your request. They transition to `queued` when picked up by a worker, then `sent` when sent to the provider, and finally `delivered` when confirmed by the provider.
+</Info>
+
+## Status Transitions
+
+Status transitions follow a monotonic state machine—once a message reaches a terminal state (`delivered`, `failed`, `blocked`), it cannot transition to other states.
+
+**Valid transitions**:
+
+- `pending` → `queued`, `sent`, `failed`, `blocked`
+- `queued` → `sent`, `delivered`, `failed`, `undelivered`
+- `sent` → `delivered`, `failed`, `undelivered`, `bounced`
+- `undelivered` → `failed`
+- `bounced` → `failed`
+
+**Terminal states** (no further transitions):
+
+- `delivered`
+- `failed`
+- `blocked`
+
+<Info>
+  **Monotonic Transitions**: Status transitions are monotonic—once a message reaches `delivered`, `failed`, or `blocked`, it cannot change to another status. This prevents confusing status updates (e.g., delivered → failed).
+</Info>
+
+## Getting Message Status
+
+### Query by Message ID
+
+Retrieve a message's current status using the message ID:
+
+```typescript
+import { SMS } from '@clancydev/sms';
+
+const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
+
+// Get message by ID
+const message = await sms.messages.get('msg_abc123');
+
+console.log('Status:', message.status);
+console.log('Delivered at:', message.delivered_at);
+console.log('Failure reason:', message.failure_reason);
+```
+
+### List Messages with Status Filter
+
+List messages filtered by status:
+
+```typescript
+// List all delivered messages
+const delivered = await sms.messages.list({
+  status: 'delivered',
+  limit: 50,
+});
+
+// List failed messages
+const failed = await sms.messages.list({
+  status: 'failed',
+  limit: 50,
+});
+```
+
+## Webhooks (Recommended)
+
+Webhooks provide real-time delivery status updates without polling. Configure webhook URLs in your workspace settings to receive status change notifications.
+
+### Webhook Setup
+
+Configure webhooks in your workspace dashboard or via API:
+
+1. Navigate to Workspace Settings → Webhooks
+2. Add webhook URL (must be HTTPS)
+3. Select event types (delivery status updates, failures, etc.)
+4. Save configuration
+
+### Webhook Endpoint Implementation
+
+Implement a webhook endpoint to receive status updates:
+
+<Tabs>
+  <Tab title="Next.js App Router">
+    ```typescript
+    // app/api/webhooks/clancy/route.ts
+    import { NextRequest, NextResponse } from 'next/server';
+    import crypto from 'crypto';
+    
+    const WEBHOOK_SECRET = process.env.CLANCY_WEBHOOK_SECRET!;
+    
+    function verifyWebhookSignature(
+      payload: string,
+      signature: string
+    ): boolean {
+      const expected = crypto
+        .createHmac('sha256', WEBHOOK_SECRET)
+        .update(payload)
+        .digest('hex');
+      
+      return crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(expected)
+      );
+    }
+    
+    export async function POST(request: NextRequest) {
+      try {
+        // Get raw body for signature verification
+        const rawBody = await request.text();
+        const signature = request.headers.get('X-Clancy-Signature');
+        
+        // Verify signature
+        if (!signature || !verifyWebhookSignature(rawBody, signature)) {
+          return NextResponse.json(
+            { error: 'Invalid signature' },
+            { status: 403 }
+          );
+        }
+        
+        const payload = JSON.parse(rawBody);
+        
+        // Handle different event types
+        switch (payload.type) {
+          case 'message.delivered':
+            await handleDelivered(payload.message);
+            break;
+          case 'message.failed':
+            await handleFailed(payload.message);
+            break;
+          case 'message.sent':
+            await handleSent(payload.message);
+            break;
+        }
+        
+        return NextResponse.json({ received: true });
+      } catch (error) {
+        console.error('Webhook error:', error);
+        return NextResponse.json(
+          { error: 'Internal server error' },
+          { status: 500 }
+        );
+      }
+    }
+    
+    async function handleDelivered(message: any) {
+      // Update your database
+      await db.messages.update({
+        where: { message_id: message.id },
+        data: {
+          status: 'delivered',
+          delivered_at: new Date(message.delivered_at),
+        },
+      });
+      
+      // Optionally notify user or trigger follow-up actions
+      await notifyUserDelivery(message.to, message.id);
+    }
+    ```
+  </Tab>
+  <Tab title="Express.js">
+    ```typescript
+    import express from 'express';
+    import crypto from 'crypto';
+    
+    const app = express();
+    const WEBHOOK_SECRET = process.env.CLANCY_WEBHOOK_SECRET!;
+    
+    // Middleware to capture raw body for signature verification
+    app.use('/webhooks/clancy', express.raw({ type: 'application/json' }));
+    
+    app.post('/webhooks/clancy', async (req, res) => {
+      try {
+        const signature = req.headers['x-clancy-signature'] as string;
+        const rawBody = req.body.toString();
+        
+        // Verify signature
+        if (!signature || !verifyWebhookSignature(rawBody, signature)) {
+          return res.status(403).json({ error: 'Invalid signature' });
+        }
+        
+        const payload = JSON.parse(rawBody);
+        
+        // Handle event
+        await handleWebhookEvent(payload);
+        
+        res.json({ received: true });
+      } catch (error) {
+        console.error('Webhook error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+    
+    function verifyWebhookSignature(payload: string, signature: string): boolean {
+      const expected = crypto
+        .createHmac('sha256', WEBHOOK_SECRET)
+        .update(payload)
+        .digest('hex');
+      
+      return crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(expected)
+      );
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+  **Signature Verification**: Always verify webhook signatures to prevent malicious requests. Use the webhook secret from your workspace settings to verify the HMAC-SHA256 signature.
+</Info>
+
+### Webhook Event Types
+
+Webhooks send events for the following status changes:
+
+- `message.sent`: Message was sent to the provider
+- `message.delivered`: Message was delivered to recipient
+- `message.failed`: Message delivery failed
+- `message.blocked`: Message was blocked by policy
+
+### Webhook Payload Structure
+
+Webhook payloads include:
+
+```typescript
+{
+  type: 'message.delivered',
+  message: {
+    id: 'msg_abc123',
+    status: 'delivered',
+    to: '+15551234567',
+    delivered_at: '2024-01-15T10:30:00Z',
+    failure_reason: null,
+  },
+  occurred_at: '2024-01-15T10:30:00Z',
+}
+```
+
+## Polling for Status
+
+For applications that don't support webhooks or need immediate feedback, poll for status updates:
+
+```typescript
+async function pollForDelivery(
+  messageId: string,
+  maxAttempts: number = 30,
+  intervalMs: number = 2000
+): Promise<Message> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+    
+    const message = await sms.messages.get(messageId);
+    
+    // Check if reached terminal state
+    if (message.status === 'delivered' || 
+        message.status === 'failed' || 
+        message.status === 'blocked') {
+      return message;
+    }
+  }
+  
+  // Still pending/queued after max attempts
+  throw new Error('Delivery status check timeout');
+}
+```
+
+<Info>
+  Polling is less efficient than webhooks and increases API usage. Use polling only when webhooks aren't feasible (e.g., one-off operations, testing, or legacy systems).
+</Info>
+
+## Handling Delivery Events
+
+### Delivery Success
+
+Handle successful delivery to update your application state:
+
+```typescript
+async function handleDelivered(message: Message) {
+  // Update database
+  await db.otpCodes.update({
+    where: { message_id: message.id },
+    data: {
+      delivered_at: new Date(message.delivered_at),
+      status: 'delivered',
+    },
+  });
+  
+  // Log delivery metric
+  await analytics.track('otp.delivered', {
+    message_id: message.id,
+    to: message.to,
+  });
+}
+```
+
+### Delivery Failure
+
+Handle delivery failures to notify users or trigger retries:
+
+```typescript
+async function handleFailed(message: Message) {
+  // Update database
+  await db.otpCodes.update({
+    where: { message_id: message.id },
+    data: {
+      status: 'failed',
+      failure_reason: message.failure_reason,
+    },
+  });
+  
+  // Notify user (e.g., show error, offer resend)
+  await notifyUserDeliveryFailed(message.to, message.failure_reason);
+  
+  // Log failure for monitoring
+  await logger.error('OTP delivery failed', {
+    message_id: message.id,
+    reason: message.failure_reason,
+  });
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Retry on failure">
+    Some failures are retryable (e.g., network errors, temporary carrier issues). Others are permanent (e.g., invalid number, suppressed recipient).
+
+    ```typescript
+    function isRetryableFailure(failureReason: string): boolean {
+      // Retry on transient errors
+      const retryablePatterns = [
+        /network error/i,
+        /timeout/i,
+        /temporary/i,
+        /carrier error/i,
+      ];
+      
+      // Don't retry on permanent errors
+      const permanentPatterns = [
+        /invalid number/i,
+        /suppressed/i,
+        /blocked/i,
+        /opted out/i,
+      ];
+      
+      if (permanentPatterns.some(pattern => pattern.test(failureReason))) {
+        return false;
+      }
+      
+      return retryablePatterns.some(pattern => pattern.test(failureReason));
+    }
+    ```
+  </Accordion>
+  <Accordion title="Delivery timeouts">
+    Messages that remain in `sent` state for extended periods may have delivery issues. Consider implementing timeout handling:
+
+    ```typescript
+    // After 24 hours, mark as failed if still not delivered
+    const MESSAGE_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours
+    
+    async function checkDeliveryTimeouts() {
+      const staleMessages = await db.messages.findMany({
+        where: {
+          status: 'sent',
+          sent_at: {
+            lt: new Date(Date.now() - MESSAGE_TIMEOUT_MS),
+          },
+        },
+      });
+      
+      for (const message of staleMessages) {
+        await db.messages.update({
+          where: { id: message.id },
+          data: {
+            status: 'failed',
+            failure_reason: 'Delivery timeout (no confirmation received)',
+          },
+        });
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Delivery Events Timeline
+
+Query delivery events to build a timeline of status changes:
+
+```typescript
+// Get message with delivery events (if supported by API)
+const message = await sms.messages.get('msg_abc123');
+
+// Delivery events show the full journey
+if (message.events) {
+  for (const event of message.events) {
+    console.log(`${event.event_type} at ${event.occurred_at}`);
+    // queued at 2024-01-15T10:30:00Z
+    // sent at 2024-01-15T10:30:02Z
+    // delivered at 2024-01-15T10:30:15Z
+  }
+}
+```
+
+## Best Practices
+
+- **Use webhooks for production**: Real-time updates without polling overhead
+- **Verify webhook signatures**: Always verify signatures to prevent spoofing
+- **Handle all event types**: Handle `delivered`, `failed`, and `blocked` events
+- **Implement idempotency**: Handle duplicate webhook deliveries gracefully
+- **Log delivery metrics**: Track delivery rates and failure reasons
+- **Monitor delivery times**: Alert on unusually long delivery times
+- **Handle timeouts**: Mark messages as failed if delivery confirmation never arrives
+
+## Next Steps
+
+- [OTP Delivery Guide](/docs/guides/otp-delivery) — Implement OTP sending with delivery tracking
+- [Error Handling Guide](/docs/guides/handling-errors) — Handle delivery failures
+- [Webhooks Reference](/docs/api-reference/webhooks) — Complete webhook documentation

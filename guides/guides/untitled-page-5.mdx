@@ -1,0 +1,335 @@
+---
+title: 'Rate Limits'
+description: 'Understand rate limits, ramping, and how to handle rate limit errors'
+---
+
+Learn how rate limits work in Clancy SMS, including ramp limits for new workspaces, per-minute and per-hour limits, and best practices for handling rate limit errors.
+
+<Info>
+**Prerequisites**: Basic understanding of rate limiting concepts. Familiarity with error handling is helpful.
+</Info>
+
+## What you'll learn
+
+In this guide, you'll learn:
+
+- How rate limits work in Clancy SMS
+- Ramp limits for new workspaces
+- Per-minute and per-hour limits
+- Recipient burst limits
+- How to handle rate limit errors
+- Best practices for staying within limits
+
+## Rate Limit Overview
+
+Clancy SMS enforces rate limits at multiple levels to protect sender reputation and prevent abuse:
+
+- **Per-minute limits**: Maximum messages per minute
+- **Per-hour limits**: Maximum messages per hour
+- **Daily limits**: Maximum messages per day (if configured)
+- **Ramp limits**: Reduced limits for new workspaces
+- **Recipient burst limits**: Maximum messages per recipient per time window
+
+<Info>
+Rate limits are workspace-specific and protect sender reputation by preventing abuse and ensuring consistent sending patterns. Exceeding limits returns a `RATE_LIMIT_EXCEEDED` error.
+</Info>
+
+## Default Limits
+
+Default rate limits vary by workspace plan and age:
+
+**New workspaces (ramp period)**:
+- Per-minute: 1-5 messages/minute (varies)
+- Per-hour: 10-50 messages/hour (ramp limit)
+- Per-day: Limited during ramp-up
+
+**Established workspaces (after ramp-up)**:
+- Per-minute: Varies by plan (typically 10-100 messages/minute)
+- Per-hour: Varies by plan (typically 500-10,000 messages/hour)
+- Per-day: Varies by plan (typically 10,000-1,000,000 messages/day)
+
+<Info>
+New workspaces start with ramp limits that automatically increase over time. No action is required—limits increase automatically based on workspace age and sending history.
+</Info>
+
+## Ramp Limits
+
+New workspaces start with **ramp limits** to prevent reputation issues:
+
+**Ramp timeline**:
+- **Day 0-1**: Use `ramp_limit_per_hour` (typically 10-50 messages/hour)
+- **Week 1**: Use 50% of normal hourly limit
+- **After Week 1**: Use full `rate_limit_per_hour`
+
+Ramp limits automatically increase based on:
+- Workspace age (creation date)
+- Sending history (success rate, compliance)
+- Message volume (consistent, gradual increases)
+
+<Callout>
+**Respect Ramp Limits**: Don't attempt to bypass ramp limits. Exceeding limits during ramp-up can delay limit increases and hurt sender reputation. Start with low-volume sending and gradually increase.
+</Callout>
+
+## Rate Limit Types
+
+### Per-Minute Limits
+
+Per-minute limits prevent burst sending:
+
+```
+Limit: 50 messages/minute
+Time window: Rolling 60-second window
+```
+
+If you send 51 messages in a minute, the 51st message will be rate limited.
+
+<Info>
+Per-minute limits use a rolling window, not fixed minute boundaries. If you send 50 messages at 10:00:30, you can send another message at 10:01:31 (61 seconds later).
+</Info>
+
+### Per-Hour Limits
+
+Per-hour limits control overall volume:
+
+```
+Limit: 1,000 messages/hour
+Time window: Rolling 60-minute window
+```
+
+If you send 1,001 messages in an hour, the 1,001st message will be rate limited.
+
+### Daily Limits
+
+Daily limits cap total daily volume:
+
+```
+Limit: 10,000 messages/day
+Time window: Calendar day (UTC)
+```
+
+Daily limits reset at midnight UTC.
+
+## Recipient Burst Limits
+
+**Recipient burst limits** prevent sending too many messages to the same recipient in a short time:
+
+- **Limit**: Maximum 10 messages per recipient per 5 minutes
+- **Purpose**: Prevents accidental loops and abuse
+- **Scope**: Per-workspace, per-recipient
+
+Exceeding the recipient burst limit returns a `RECIPIENT_BURST_LIMIT` error:
+
+```json
+{
+  "error": "Sending not allowed",
+  "reason": "Recipient burst limit exceeded: 11/10 messages to +15551234567 in 5 minutes",
+  "violation_type": "recipient_burst",
+  "hint": "Too many messages sent to this recipient recently. Wait a few minutes before trying again."
+}
+```
+
+<Info>
+Recipient burst limits are separate from overall rate limits. You can hit the recipient burst limit even if you're under your overall rate limits.
+</Info>
+
+## Rate Limit Errors
+
+When you exceed a rate limit, the API returns a `RATE_LIMIT_EXCEEDED` error:
+
+```json
+{
+  "error": "Sending not allowed",
+  "reason": "Rate limit exceeded: 51/50 messages per minute",
+  "violation_type": "rate_limit",
+  "hint": "Please wait before sending more messages. Check your rate limits in the dashboard."
+}
+```
+
+### Handling Rate Limit Errors
+
+Handle rate limit errors with exponential backoff:
+
+```typescript
+import { PolicyBlockedError } from '@clancydev/sms';
+
+async function sendWithRateLimitHandling(request: OTPRequest) {
+  const maxRetries = 3;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await sms.otp.send(request);
+    } catch (error) {
+      if (error instanceof PolicyBlockedError && 
+          error.code === 'RATE_LIMIT_EXCEEDED') {
+        if (attempt < maxRetries - 1) {
+          // Wait 60 seconds before retry (rate limits typically reset per minute)
+          const delay = 60000; // 60 seconds
+          console.log(`Rate limited. Waiting ${delay / 1000} seconds before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+      }
+      
+      throw error;
+    }
+  }
+  
+  throw new Error('Max retries exceeded');
+}
+```
+
+### Rate Limit Response Headers
+
+Rate limit response headers (if supported) provide information about limits:
+
+```
+X-RateLimit-Limit: 50
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1642248000
+```
+
+<Info>
+Rate limit headers may not be available in all API versions. Check the API reference for your specific version.
+</Info>
+
+## Checking Current Limits
+
+Check your current rate limits via the workspace status endpoint:
+
+```typescript
+const status = await sms.status.get();
+
+console.log('Sending allowed:', status.sending_allowed);
+console.log('Reason:', status.reason);
+
+// If paused due to rate limits:
+if (!status.sending_allowed && status.reason?.includes('rate limit')) {
+  console.log('Rate limited. Check dashboard for details.');
+}
+```
+
+## Best Practices
+
+### Application-Level Rate Limiting
+
+Implement application-level rate limiting to stay within API limits:
+
+```typescript
+class RateLimiter {
+  private requests: Map<string, number[]> = new Map();
+  
+  async checkLimit(key: string, limit: number, windowMs: number): Promise<boolean> {
+    const now = Date.now();
+    const requests = this.requests.get(key) || [];
+    
+    // Remove old requests outside window
+    const recentRequests = requests.filter(time => now - time < windowMs);
+    
+    if (recentRequests.length >= limit) {
+      return false; // Rate limited
+    }
+    
+    // Add current request
+    recentRequests.push(now);
+    this.requests.set(key, recentRequests);
+    
+    return true; // Within limit
+  }
+}
+
+const rateLimiter = new RateLimiter();
+
+async function sendOTPWithApplicationLimiting(phoneNumber: string, code: string) {
+  // Check application-level limit before API call
+  const withinLimit = await rateLimiter.checkLimit(
+    'global',
+    45, // Stay under 50/minute API limit
+    60000 // 60 second window
+  );
+  
+  if (!withinLimit) {
+    throw new Error('Rate limited at application level. Wait before retrying.');
+  }
+  
+  // Send via API
+  return await sms.otp.send({
+    to: phoneNumber,
+    code: code,
+    requestId: `otp_${Date.now()}`,
+  });
+}
+```
+
+### Spreading Sends Over Time
+
+Instead of sending all messages at once, spread them over time:
+
+```typescript
+async function sendBatchWithSpacing(requests: OTPRequest[], messagesPerMinute: number = 40) {
+  const delayBetweenMessages = 60000 / messagesPerMinute; // Milliseconds between sends
+  
+  for (const request of requests) {
+    await sms.otp.send(request);
+    
+    // Wait before next send to stay under rate limit
+    await new Promise(resolve => setTimeout(resolve, delayBetweenMessages));
+  }
+}
+```
+
+### Monitoring Rate Limit Errors
+
+Monitor rate limit errors to identify issues:
+
+```typescript
+const rateLimitErrors = [];
+
+try {
+  await sms.otp.send(...);
+} catch (error) {
+  if (error instanceof PolicyBlockedError && 
+      error.code === 'RATE_LIMIT_EXCEEDED') {
+    // Track rate limit errors
+    rateLimitErrors.push({
+      timestamp: new Date(),
+      message: error.message,
+    });
+    
+    // Alert if rate limit errors are frequent
+    if (rateLimitErrors.length > 10) {
+      await alertAdmin('High rate limit error rate', {
+        errors: rateLimitErrors.length,
+      });
+    }
+  }
+}
+```
+
+## Requesting Limit Increases
+
+To request higher limits:
+
+1. **Review current usage** in the dashboard
+2. **Demonstrate consistent, compliant sending** (no policy violations, good delivery rates)
+3. **Explain use case** and expected volume
+4. **Contact support** with your request
+
+<Info>
+Limit increases are granted based on sending history, compliance record, and use case. New workspaces should build sending history before requesting increases.
+</Info>
+
+## Best Practices
+
+- **Respect ramp limits**: Start with low-volume sending during ramp-up
+- **Implement application-level limits**: Stay below API limits to avoid errors
+- **Spread sends over time**: Don't send all messages at once
+- **Monitor rate limit errors**: Track and alert on frequent rate limit errors
+- **Handle rate limits gracefully**: Use exponential backoff for retries
+- **Plan for capacity**: Request limit increases before hitting limits
+- **Use idempotency keys**: Prevent duplicate sends on retries
+
+## Next Steps
+
+- [Error Handling Guide](/docs/guides/handling-errors) — Handle rate limit errors gracefully
+- [Limits and Ramping](/docs/policies/limits-and-ramping) — Detailed limits documentation
+- [API Reference: Workspace Status](/docs/api-reference/workspace-status) — Check sending status
