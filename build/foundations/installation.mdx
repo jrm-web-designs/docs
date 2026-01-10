@@ -23,22 +23,22 @@ Install `@clancydev/sms` using your preferred package manager:
 
 <Tabs>
   <Tab title="npm">
-    ```bash
+    ```bash Install with npm icon="terminal" lines
     npm install @clancydev/sms
     ```
   </Tab>
   <Tab title="yarn">
-    ```bash
+    ```bash Install with yarn icon="terminal" lines
     yarn add @clancydev/sms
     ```
   </Tab>
   <Tab title="pnpm">
-    ```bash
+    ```bash Install with pnpm icon="terminal" lines
     pnpm add @clancydev/sms
     ```
   </Tab>
   <Tab title="bun">
-    ```bash
+    ```bash Install with bun icon="terminal" lines
     bun add @clancydev/sms
     ```
   </Tab>
@@ -48,7 +48,7 @@ Install `@clancydev/sms` using your preferred package manager:
 
 Import the `SMS` class and create an instance with your API key:
 
-```typescript
+```typescript Initialize SMS client icon="typescript" lines
 import { SMS } from '@clancydev/sms';
 
 const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
@@ -62,7 +62,7 @@ const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
 
 The `SMS` constructor accepts an optional configuration object:
 
-```typescript
+```typescript Custom configuration icon="typescript" lines
 const sms = new SMS(process.env.CLANCY_SMS_API_KEY!, {
   baseUrl: 'https://api.clancy.com' // Optional: custom API base URL
 });
@@ -79,7 +79,7 @@ const sms = new SMS(process.env.CLANCY_SMS_API_KEY!, {
 
 Test your installation by sending a test OTP:
 
-```typescript
+```typescript Test installation icon="typescript" lines
 import { SMS } from '@clancydev/sms';
 
 const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
@@ -106,7 +106,7 @@ The SDK is written in TypeScript and includes type definitions. No additional `@
 
 If you're using TypeScript, you'll get full type checking and autocomplete:
 
-```typescript
+```typescript TypeScript types icon="typescript" lines
 import { SMS, OTPRequest, Message } from '@clancydev/sms';
 
 const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
@@ -124,7 +124,7 @@ const message: Message = await sms.otp.send(request);
 
 Store your API key in an environment variable. Create a `.env` file (or `.env.local` for Next.js):
 
-```bash
+```bash Environment variable icon="terminal" lines
 CLANCY_SMS_API_KEY=sk_live_abc123...
 ```
 
@@ -138,7 +138,7 @@ CLANCY_SMS_API_KEY=sk_live_abc123...
 
 For Next.js App Router, create the client in a server component or API route:
 
-```typescript
+```typescript Next.js App Router icon="typescript" lines
 // app/api/send-otp/route.ts
 import { SMS } from '@clancydev/sms';
 import { NextResponse } from 'next/server';
@@ -162,7 +162,7 @@ export async function POST(request: Request) {
 
 For Next.js Pages Router, use API routes:
 
-```typescript
+```typescript Next.js Pages Router icon="typescript" lines
 // pages/api/send-otp.ts
 import { SMS } from '@clancydev/sms';
 import type { NextApiRequest, NextApiResponse } from 'next';
@@ -189,7 +189,7 @@ export default async function handler(
 
 For Express.js, create a route handler:
 
-```typescript
+```typescript Express.js icon="typescript" lines
 import express from 'express';
 import { SMS } from '@clancydev/sms';
 
@@ -219,7 +219,7 @@ app.post('/api/send-otp', async (req, res) => {
 
 For standalone Node.js applications:
 
-```typescript
+```typescript Standalone Node.js icon="typescript" lines
 import { SMS } from '@clancydev/sms';
 
 const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);

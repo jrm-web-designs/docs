@@ -40,7 +40,7 @@ All errors extend `ClancyError` base class. Check error types using `instanceof`
 
 Handle errors using try-catch blocks:
 
-```typescript
+```typescript Error handling example icon="typescript" lines
 import {
   SMS,
   ClancyError,
@@ -88,7 +88,7 @@ try {
 
 Error objects include helpful metadata:
 
-```typescript
+```typescript Error object structure icon="typescript" lines
 {
   name: 'PolicyBlockedError',
   code: 'RATE_LIMIT_EXCEEDED',

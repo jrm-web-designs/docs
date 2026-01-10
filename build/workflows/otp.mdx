@@ -37,7 +37,7 @@ Generate secure OTP codes using a cryptographically secure random number generat
 <AccordionGroup>
   <Accordion title="Node.js code generation">
 
-```typescript
+```typescript Node.js OTP generation icon="typescript" lines
 import crypto from 'crypto';
 
 // 6-digit numeric code
@@ -82,7 +82,7 @@ function generateSecureNumericOTP(length: number = 6): string {
   </Accordion>
   <Accordion title="Python code generation">
 
-```python
+```python Python OTP generation icon="python" lines
 import secrets
 import string
 
@@ -128,7 +128,7 @@ Use the Clancy SMS SDK to send OTP codes. The SDK automatically formats the mess
 
 ### Basic Example
 
-```typescript
+```typescript Basic OTP send icon="typescript" lines
 import { SMS } from '@clancydev/sms';
 import crypto from 'crypto';
 
@@ -163,7 +163,7 @@ async function sendOTP(phoneNumber: string, userId: string) {
 
 For login flows, associate the OTP with a session identifier:
 
-```typescript
+```typescript Session tracking icon="typescript" lines
 async function sendLoginOTP(phoneNumber: string, sessionId: string) {
   const code = generateSecureNumericOTP(6);
   const requestId = `login_${sessionId}_${Date.now()}`;
@@ -203,7 +203,7 @@ Idempotency keys ensure that retrying the same request doesn't create duplicate 
 - Timestamps only (collisions possible)
 - User ID only (multiple sends to same user conflict)
 
-```typescript
+```typescript Idempotency key patterns icon="typescript" lines
 // ✅ Good: Deterministic and unique per intent
 const requestId = `otp_${userId}_login_${Math.floor(Date.now() / 60000)}`; // Minute window
 
@@ -226,7 +226,7 @@ OTP delivery is asynchronous. After a successful API response, the message is qu
 
 For immediate feedback, poll the message status:
 
-```typescript
+```typescript Polling status icon="typescript" lines
 async function sendOTPWithPolling(phoneNumber: string, code: string) {
   const message = await sms.otp.send({
     to: phoneNumber,
@@ -253,7 +253,7 @@ async function sendOTPWithPolling(phoneNumber: string, code: string) {
 
 For production applications, use webhooks to receive delivery status updates:
 
-```typescript
+```typescript Webhook handler icon="typescript" lines
 // Webhook endpoint (Next.js API route example)
 export async function POST(request: Request) {
   const payload = await request.json();
@@ -287,7 +287,7 @@ Webhooks are recommended for production. They provide real-time delivery status 
 
 Handle errors gracefully to provide a good user experience:
 
-```typescript
+```typescript Error handling icon="typescript" lines
 import {
   SMS,
   ValidationError,
@@ -356,7 +356,7 @@ async function sendOTPWithErrorHandling(phoneNumber: string, code: string) {
 
 **Solution**: Always store the code (with expiration) before sending the SMS, or use a database transaction to ensure atomicity.
 
-```typescript
+```typescript Code storage order icon="typescript" lines
 // ❌ Bad: Send before storing
 const message = await sms.otp.send({ to: phoneNumber, code: code, requestId });
 await db.otpCodes.create({ code, expires_at });
@@ -373,7 +373,7 @@ const message = await sms.otp.send({ to: phoneNumber, code: code, requestId });
 
 **Solution**: Include a timestamp window or action identifier in the idempotency key to allow new codes after expiration.
 
-```typescript
+```typescript Idempotency key reuse icon="typescript" lines
 // ❌ Bad: Same key reused
 const requestId = `otp_${userId}`; // Always same for user
 
@@ -388,7 +388,7 @@ const requestId = `otp_${userId}_${Math.floor(Date.now() / 600000)}`; // New eve
 
 **Solution**: Check delivery status and provide alternative methods (e.g., resend option, email fallback).
 
-```typescript
+```typescript Delivery failure handling icon="typescript" lines
 // ✅ Good: Check status and handle failures
 const message = await sms.otp.send({ to: phoneNumber, code: code, requestId });
 
@@ -409,7 +409,7 @@ setTimeout(async () => {
 
 **Solution**: Use reasonable expiration times (5-15 minutes) and allow resend after expiration.
 
-```typescript
+```typescript Code expiration times icon="typescript" lines
 // ❌ Bad: Too short
 const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
 

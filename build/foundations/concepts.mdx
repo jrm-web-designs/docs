@@ -87,7 +87,7 @@ When you send a message with an idempotency key, Clancy SMS:
 
 **Example**:
 
-```typescript
+```typescript Idempotency example icon="typescript" lines
 // First request creates a message
 const message1 = await sms.otp.send({
   to: '+15551234567',

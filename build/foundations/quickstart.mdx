@@ -24,22 +24,22 @@ Install the SDK using your package manager:
 
 <Tabs>
   <Tab title="npm">
-    ```bash
+    ```bash Install with npm icon="terminal" lines
     npm install @clancydev/sms
     ```
   </Tab>
   <Tab title="yarn">
-    ```bash
+    ```bash Install with yarn icon="terminal" lines
     yarn add @clancydev/sms
     ```
   </Tab>
   <Tab title="pnpm">
-    ```bash
+    ```bash Install with pnpm icon="terminal" lines
     pnpm add @clancydev/sms
     ```
   </Tab>
   <Tab title="bun">
-    ```bash
+    ```bash Install with bun icon="terminal" lines
     bun add @clancydev/sms
     ```
   </Tab>
@@ -49,7 +49,7 @@ Install the SDK using your package manager:
 
 Create an instance of the SMS client with your API key. Store your API key in an environment variable—never hardcode it in your application.
 
-```typescript
+```typescript Initialize SMS client icon="typescript" lines
 import { SMS } from '@clancydev/sms';
 
 const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
@@ -61,7 +61,7 @@ const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
 
 If you're using a custom API base URL (for testing or self-hosted instances), you can configure it:
 
-```typescript
+```typescript Custom API URL icon="typescript" lines
 const sms = new SMS(process.env.CLANCY_SMS_API_KEY!, {
   baseUrl: 'https://api.your-instance.com'
 });
@@ -75,7 +75,7 @@ Use the `sms.otp.send()` method to send an OTP code. This method requires:
 - `code`: The OTP code to send (e.g., `"123456"`)
 - `requestId`: A unique identifier for this send request (used for idempotency)
 
-```typescript
+```typescript Send OTP icon="typescript" lines
 import { SMS } from '@clancydev/sms';
 
 const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
@@ -106,7 +106,7 @@ sendOTP();
 
 The `sms.otp.send()` method returns a `Message` object:
 
-```typescript
+```typescript Message response icon="typescript" lines
 {
   id: "msg_abc123",
   status: "pending",
@@ -134,7 +134,7 @@ The `status` field indicates the current state of the message:
 
 Retrieve a message's current status and delivery events using the message ID:
 
-```typescript
+```typescript Check message status icon="typescript" lines
 async function checkStatus(messageId: string) {
   const message = await sms.messages.get(messageId);
   
@@ -154,7 +154,7 @@ async function checkStatus(messageId: string) {
 
 Clancy SMS throws specific error types that you should handle:
 
-```typescript
+```typescript Error handling icon="typescript" lines
 import {
   SMS,
   AuthenticationError,
@@ -189,7 +189,7 @@ try {
   <Accordion title="Common validation errors">
     **Invalid phone number format**: Phone numbers must be in E.164 format (start with `+`)
 
-    ```typescript
+    ```typescript Phone number format icon="typescript" lines
     // ❌ Invalid
     to: '15551234567'
     
@@ -216,7 +216,7 @@ try {
 
 Here's a complete example that combines everything:
 
-```typescript
+```typescript Complete example icon="typescript" lines
 import { SMS, ValidationError, PolicyBlockedError } from '@clancydev/sms';
 
 const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);

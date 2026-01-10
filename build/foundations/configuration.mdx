@@ -21,7 +21,7 @@ Your Clancy SMS API key for authenticating requests.
 
 **Example**:
 
-```bash
+```bash API key example icon="terminal" lines
 CLANCY_SMS_API_KEY=sk_live_abc123def456ghi789
 ```
 
@@ -35,7 +35,7 @@ Custom API base URL. Use this for testing with a custom instance or local develo
 
 **Example**:
 
-```bash
+```bash Custom API URL icon="terminal" lines
 CLANCY_API_URL=https://api.staging.clancy.com
 ```
 
@@ -49,7 +49,7 @@ In browser environments, the SDK defaults to `window.location.origin` if `CLANCY
 
 Create a `.env` file in your project root:
 
-```bash
+```bash Local development icon="terminal" lines
 CLANCY_SMS_API_KEY=sk_live_abc123def456ghi789
 CLANCY_API_URL=https://api.clancy.com
 ```
@@ -62,7 +62,7 @@ Add `.env` to your `.gitignore` file to prevent committing secrets to version co
 
 Next.js automatically loads environment variables from `.env.local`. Create `.env.local` in your project root:
 
-```bash
+```bash Next.js configuration icon="terminal" lines
 CLANCY_SMS_API_KEY=sk_live_abc123def456ghi789
 ```
 
@@ -95,7 +95,7 @@ In Railway, add environment variables:
 
 In Heroku, use the CLI or dashboard:
 
-```bash
+```bash Heroku CLI icon="terminal" lines
 heroku config:set CLANCY_SMS_API_KEY=sk_live_abc123...
 ```
 
@@ -108,7 +108,7 @@ Or use the Heroku Dashboard → Settings → Config Vars
 
 **EC2 / ECS**: Use AWS Systems Manager Parameter Store or Secrets Manager:
 
-```bash
+```bash AWS Parameter Store icon="terminal" lines
 aws ssm put-parameter \
   --name "/clancy/sms/api-key" \
   --value "sk_live_abc123..." \
@@ -120,7 +120,7 @@ aws ssm put-parameter \
 
 Use `docker-compose.yml`:
 
-```yaml
+```yaml Docker Compose icon="file-text" lines
 services:
   app:
     environment:
@@ -138,11 +138,11 @@ Or use a `.env` file that Docker Compose reads automatically.
 
 Use `dotenv` to load environment variables from a `.env` file:
 
-```bash
+```bash Install dotenv icon="terminal" lines
 npm install dotenv
 ```
 
-```typescript
+```typescript Node.js setup icon="typescript" lines
 import 'dotenv/config';
 import { SMS } from '@clancydev/sms';
 
@@ -153,7 +153,7 @@ const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
 
 Next.js automatically loads `.env.local`, `.env.development`, and `.env.production`. No additional setup required:
 
-```typescript
+```typescript Next.js setup icon="typescript" lines
 import { SMS } from '@clancydev/sms';
 
 const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
@@ -163,7 +163,7 @@ const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
 
 TypeScript doesn't know about `process.env` variables by default. Create a type declaration file:
 
-```typescript
+```typescript TypeScript types icon="typescript" lines
 // env.d.ts
 declare namespace NodeJS {
   interface ProcessEnv {
@@ -179,7 +179,7 @@ declare namespace NodeJS {
 
 Use test API keys for local development:
 
-```bash
+```bash Development environment icon="terminal" lines
 # .env.local (development)
 CLANCY_SMS_API_KEY=sk_test_xyz789...
 ```
@@ -188,7 +188,7 @@ CLANCY_SMS_API_KEY=sk_test_xyz789...
 
 Use staging API keys or point to a staging API URL:
 
-```bash
+```bash Staging environment icon="terminal" lines
 # .env.staging
 CLANCY_SMS_API_KEY=sk_live_abc123...
 CLANCY_API_URL=https://api.staging.clancy.com
@@ -198,7 +198,7 @@ CLANCY_API_URL=https://api.staging.clancy.com
 
 Use production API keys:
 
-```bash
+```bash Production environment icon="terminal" lines
 # .env.production
 CLANCY_SMS_API_KEY=sk_live_abc123...
 ```
@@ -207,7 +207,7 @@ CLANCY_SMS_API_KEY=sk_live_abc123...
 
 Validate that required environment variables are set at application startup:
 
-```typescript
+```typescript Environment validation icon="typescript" lines
 function validateEnv() {
   if (!process.env.CLANCY_SMS_API_KEY) {
     throw new Error(
@@ -229,14 +229,14 @@ const sms = new SMS(process.env.CLANCY_SMS_API_KEY!);
 
 **❌ Bad**: Exposing API key in browser code
 
-```typescript
+```typescript Bad example icon="typescript" lines
 // ❌ NEVER DO THIS
 const sms = new SMS('sk_live_abc123...'); // Hardcoded key
 ```
 
 **✅ Good**: Use server-side API route
 
-```typescript
+```typescript Good example icon="typescript" lines
 // ✅ Server-side API route
 // app/api/send-otp/route.ts
 import { SMS } from '@clancydev/sms';
