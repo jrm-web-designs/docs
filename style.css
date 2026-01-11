@@ -16,12 +16,25 @@
     }
 }
 
+#sidebar-title{
+    font-weight: 600 !important;
+}
+
 #sidebar-content{
     width: 15rem;
 }
 
 .sidebar-group-header{
     padding: 0px 0px;
+}
+
+.eyebrow{
+    background: linear-gradient(375deg, rgb(231, 89, 205) 40%, rgba(225, 76, 152, 1) 60%, rgba(240, 83, 72, 1) 80%, rgba(236, 108, 18, 1) 100%);
+    -webkit-background-clip: text !important;
+    background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    color: transparent !important;
+    width: fit-content;
 }
 
 /* Global active link colors - works for sidebar and TOC */
@@ -43,20 +56,30 @@ a[class*="text-primary"] {
 #navigation-items a.border-primary,
 #navigation-items a[class*="border-primary"] {
     position: relative !important;
+    padding-left: 16px !important; /* Add padding for the caret */
 }
 
+/* Caret using ::before pseudo-element */
 #sidebar-content a.border-primary::before,
 #sidebar-content a[class*="border-primary"]::before,
 #navigation-items a.border-primary::before,
 #navigation-items a[class*="border-primary"]::before {
-    content: url('/assets/caret-right.svg') !important;
+    content: '' !important;
     position: absolute !important;
-    left: 0 !important; /* Position at left edge, before the padding-left:1rem */
-    top: calc(50% - 3px) !important;
+    left: -2px !important;
+    top: 50% !important;
     transform: translateY(-50%) !important;
     width: 12px !important;
     height: 12px !important;
-    display: block !important;
+    mask-image: url('/assets/caret-right.svg') !important;
+    -webkit-mask-image: url('/assets/caret-right.svg') !important;
+    mask-repeat: no-repeat !important;
+    -webkit-mask-repeat: no-repeat !important;
+    mask-position: center !important;
+    -webkit-mask-position: center !important;
+    mask-size: 12px 12px !important;
+    -webkit-mask-size: 12px 12px !important;
+    background-color: #000000 !important; /* Primary color (black) for light mode */
 }
 
 /* Dark mode - adjust caret color for dark theme */
@@ -68,7 +91,7 @@ a[class*="text-primary"] {
 [data-theme="dark"] #sidebar-content a[class*="border-primary"]::before,
 [data-theme="dark"] #navigation-items a.border-primary::before,
 [data-theme="dark"] #navigation-items a[class*="border-primary"]::before {
-    filter: invert(1) !important;
+    background-color: #ffffff !important; /* Primary color (white) for dark mode */
 }
 
 
@@ -157,6 +180,28 @@ div[class*="border-r"][id*="sidebar"] {
 /* Navbar - keep full width, constrain inner content */
 #navbar {
     width: 100% !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+}
+
+/* Navbar background layers - override Tailwind classes */
+/* Target the first child div (z-10 absolute overlay) */
+#navbar > div:first-child {
+    background-image: linear-gradient(to bottom, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0)) !important; /* White gradient: opacity 1 at top, 0 at bottom for light mode */
+    background-color: transparent !important;
+    border-bottom-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+.dark #navbar > div:first-child,
+[data-theme="dark"] #navbar > div:first-child {
+    background-image: linear-gradient(to bottom, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0)) !important; /* Black gradient: opacity 1 at top, 0 at bottom for dark mode */
+    background-color: transparent !important;
+    border-bottom-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Hide the second child div (z-0 background-light/dark) to show through the blurred overlay */
+#navbar > div:nth-child(2) {
+    display: none !important;
 }
 
 /* Navbar inner content container - match content width */
