@@ -1,3 +1,12 @@
+/* Import Google Font */
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap');
+
+/* Apply Instrument Serif to logo */
+.nav-logo {
+    font-family: 'Instrument Serif', serif !important;
+    letter-spacing: 0px !important;
+}
+
 /* Navigation items - smaller screens */
 #navigation-items{
     padding-top: 24px !important;
@@ -16,8 +25,23 @@
     }
 }
 
+/* Topbar CTA button - white text for dark mode */
+#topbar-cta-button a,
+#topbar-cta-button a div,
+#topbar-cta-button a span,
+#topbar-cta-button a svg {
+    color: #ffffff !important;
+}
+
+#topbar-cta-button a[class*="text-primary"],
+#topbar-cta-button a div[class*="text-primary"],
+#topbar-cta-button a [class*="text-primary-light"] {
+    color: #ffffff !important;
+}
+
 #sidebar-title{
     font-weight: 600 !important;
+    color: #ffffff !important;
 }
 
 #sidebar-content{
@@ -29,24 +53,14 @@
 }
 
 .eyebrow{
-    background: linear-gradient(375deg, rgb(231, 89, 205) 40%, rgba(225, 76, 152, 1) 60%, rgba(240, 83, 72, 1) 80%, rgba(236, 108, 18, 1) 100%);
-    -webkit-background-clip: text !important;
-    background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-    color: transparent !important;
-    width: fit-content;
+    color: #ffffff !important;
 }
 
 /* Global active link colors - works for sidebar and TOC */
 a.text-primary,
-a[class*="text-primary"] {
-    color: #000000 !important; /* black for light mode */
-}
-
-.dark a.text-primary-light,
-.dark a[class*="text-primary-light"],
-[data-theme="dark"] a.text-primary-light,
-[data-theme="dark"] a[class*="text-primary-light"] {
+a[class*="text-primary"],
+a.text-primary-light,
+a[class*="text-primary-light"] {
     color: #ffffff !important; /* white for dark mode */
 }
 
@@ -79,18 +93,6 @@ a[class*="text-primary"] {
     -webkit-mask-position: center !important;
     mask-size: 12px 12px !important;
     -webkit-mask-size: 12px 12px !important;
-    background-color: #000000 !important; /* Primary color (black) for light mode */
-}
-
-/* Dark mode - adjust caret color for dark theme */
-.dark #sidebar-content a.border-primary::before,
-.dark #sidebar-content a[class*="border-primary"]::before,
-.dark #navigation-items a.border-primary::before,
-.dark #navigation-items a[class*="border-primary"]::before,
-[data-theme="dark"] #sidebar-content a.border-primary::before,
-[data-theme="dark"] #sidebar-content a[class*="border-primary"]::before,
-[data-theme="dark"] #navigation-items a.border-primary::before,
-[data-theme="dark"] #navigation-items a[class*="border-primary"]::before {
     background-color: #ffffff !important; /* Primary color (white) for dark mode */
 }
 
@@ -134,7 +136,7 @@ div[class*="border-r"][id*="sidebar"] {
 #navigation-items::-webkit-scrollbar-thumb,
 [class*="sidebar-content"]::-webkit-scrollbar-thumb,
 [class*="stable-scrollbar-gutter"]::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.15) !important;
+    background: rgba(255, 255, 255, 0.15) !important;
     border-radius: 2px !important;
 }
 
@@ -142,21 +144,6 @@ div[class*="border-r"][id*="sidebar"] {
 #navigation-items::-webkit-scrollbar-thumb:hover,
 [class*="sidebar-content"]::-webkit-scrollbar-thumb:hover,
 [class*="stable-scrollbar-gutter"]::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 0, 0, 0.25) !important;
-}
-
-/* Dark mode scrollbar */
-.dark #sidebar-content::-webkit-scrollbar-thumb,
-.dark #navigation-items::-webkit-scrollbar-thumb,
-[data-theme="dark"] #sidebar-content::-webkit-scrollbar-thumb,
-[data-theme="dark"] #navigation-items::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15) !important;
-}
-
-.dark #sidebar-content::-webkit-scrollbar-thumb:hover,
-.dark #navigation-items::-webkit-scrollbar-thumb:hover,
-[data-theme="dark"] #sidebar-content::-webkit-scrollbar-thumb:hover,
-[data-theme="dark"] #navigation-items::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.25) !important;
 }
 
@@ -166,13 +153,6 @@ div[class*="border-r"][id*="sidebar"] {
 [class*="sidebar-content"],
 [class*="stable-scrollbar-gutter"] {
     scrollbar-width: thin !important;
-    scrollbar-color: rgba(0, 0, 0, 0.15) transparent !important;
-}
-
-.dark #sidebar-content,
-.dark #navigation-items,
-[data-theme="dark"] #sidebar-content,
-[data-theme="dark"] #navigation-items {
     scrollbar-color: rgba(255, 255, 255, 0.15) transparent !important;
 }
 
@@ -187,13 +167,6 @@ div[class*="border-r"][id*="sidebar"] {
 /* Navbar background layers - override Tailwind classes */
 /* Target the first child div (z-10 absolute overlay) */
 #navbar > div:first-child {
-    background-image: linear-gradient(to bottom, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0)) !important; /* White gradient: opacity 1 at top, 0 at bottom for light mode */
-    background-color: transparent !important;
-    border-bottom-color: rgba(0, 0, 0, 0.1) !important;
-}
-
-.dark #navbar > div:first-child,
-[data-theme="dark"] #navbar > div:first-child {
     background-image: linear-gradient(to bottom, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0)) !important; /* Black gradient: opacity 1 at top, 0 at bottom for dark mode */
     background-color: transparent !important;
     border-bottom-color: rgba(255, 255, 255, 0.1) !important;
@@ -223,6 +196,14 @@ div[class*="border-r"][id*="sidebar"] {
 #navbar [class*="h-12"][class*="hidden"] {
     padding-left: 0px !important;
     padding-right: 0px !important;
+}
+
+/* Mobile navbar padding - 20px left and right */
+@media (max-width: 1023px) {
+    #navbar [class*="flex"][class*="items-center"][class*="h-16"] {
+        padding-left: 20px !important;
+        padding-right: 20px !important;
+    }
 }
 
 /* Large screens - navbar inner content matches content width (1400px) */
